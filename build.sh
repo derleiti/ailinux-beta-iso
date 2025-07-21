@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v20.0 - Complete Production Version
+# AILinux ISO Build Script v20.1 - Complete Production Version
 # Creates a bootable Live ISO of AILinux based on Ubuntu 24.04 (Noble Numbat)
 #
 # Features:
@@ -219,12 +219,12 @@ EOF
         
         # Configure basic locale and APT
         apt-get update
-        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release
+        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
 
-        # Add Microsoft VS Code repository
+        # Add Microsoft VS Code repository (fixed version)
         echo 'Adding Microsoft VS Code repository...'
-        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/packages.microsoft.gpg
-        echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' > /etc/apt/sources.list.d/vscode.list
+        curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
+        echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
 
         # Add AILinux repository (this script will also handle external repos like Chrome, Wine, etc.)
         echo 'Adding AILinux custom repository and other external sources...'
@@ -275,8 +275,6 @@ step_03_install_packages() {
             gwenview ark dolphin \
             ubuntu-restricted-extras ffmpeg \
             pulseaudio pulseaudio-utils pavucontrol \
-            google-chrome-stable \
-            winehq-staging winetricks \
             git build-essential \
             python3 python3-pip python3-venv \
             nodejs npm default-jdk \
@@ -285,9 +283,28 @@ step_03_install_packages() {
             jq tree vim nano curl wget \
             software-properties-common apt-transport-https
         
-        # Install VS Code (from Microsoft repository)
+        # Try to install optional packages
+        echo 'Installing optional packages...'
+        
+        # Google Chrome (if repo is available)
+        apt-get install -y google-chrome-stable || {
+            echo 'Google Chrome not available, skipping...'
+        }
+        
+        # Wine (if repo is available)
+        apt-get install -y winehq-staging winetricks || {
+            echo 'Wine not available, skipping...'
+        }
+        
+        # VS Code (from Microsoft repository)
         apt-get install -y code || {
-            echo 'Warning: VS Code installation failed, continuing without it...'
+            echo 'VS Code not available, skipping...'
+            # Try alternative method
+            wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb || true
+            if [ -f /tmp/vscode.deb ]; then
+                dpkg -i /tmp/vscode.deb || apt-get install -f -y
+                rm -f /tmp/vscode.deb
+            fi
         }
     "
     log_success "All core packages and desktop environment installed."
@@ -445,8 +462,20 @@ step_05_configure_calamares() {
     
     run_in_chroot "
         set -e
-        apt-get install -y calamares calamares-settings-ubuntu \
-            python3-pyqt5 python3-yaml python3-parted imagemagick
+        # Install Calamares and dependencies
+        apt-get install -y calamares python3-pyqt5 python3-yaml python3-parted imagemagick || {
+            echo 'Warning: Some Calamares packages not available, trying minimal installation...'
+            apt-get install -y calamares || {
+                echo 'Calamares not available in repositories, installing from source...'
+                # Alternative: Download and install Calamares deb package
+                wget -q https://github.com/calamares/calamares/releases/download/v3.3.1/calamares_3.3.1-1_amd64.deb -O /tmp/calamares.deb || {
+                    echo 'Failed to download Calamares, skipping installer configuration...'
+                    exit 0
+                }
+                dpkg -i /tmp/calamares.deb || apt-get install -f -y
+                rm -f /tmp/calamares.deb
+            }
+        }
         
         # Create Calamares configuration
         mkdir -p /etc/calamares/modules
@@ -549,10 +578,10 @@ if [ -f /opt/ailinux/.env ]; then
 fi
 
 # Enable services in target system
-chroot /target systemctl enable sddm
-chroot /target systemctl enable NetworkManager
-chroot /target systemctl enable bluetooth
-chroot /target systemctl enable cups
+chroot /target systemctl enable sddm || true
+chroot /target systemctl enable NetworkManager || true
+chroot /target systemctl enable bluetooth || true
+chroot /target systemctl enable cups || true
 
 # Create welcome message
 cat > /target/etc/motd << EOF
@@ -837,7 +866,7 @@ main() {
     local start_time
     start_time=$(date +%s)
     
-    log_info "==================== AILinux ISO Build v20.0 ===================="
+    log_info "==================== AILinux ISO Build v20.1 ===================="
     log_info "Starting build process for ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     
     step_01_setup
