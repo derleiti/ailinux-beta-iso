@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.4 - Final UDF Fix)
+# AILinux ISO Build-Skript (v17.5 - Final ISOhybrid Fix)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # und den Spezifikationen in prompt.txt.
 #
@@ -478,22 +478,21 @@ step_12_create_iso() {
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
-    # KORREKTUR: -udf Flag hinzugefügt, um das 4-GiB-Dateilimit zu umgehen
+    # KORREKTUR: Robuste isohybrid-Erstellung für große Dateien
     sudo xorriso -as mkisofs \
-        -r -V "${volume_id}" \
         -o "${BUILD_DIR}/${ISO_NAME}" \
-        -J -joliet-long -l \
-        -udf \
-        --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
-        -partition_offset 16 \
-        --mbr-force-bootable \
-        -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b "${ISO_DIR}/EFI/BOOT/bootx64.efi" \
-        -appended_part_as_gpt \
-        -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
-        -c '/isolinux/boot.cat' \
-        -b '/isolinux/isolinux.bin' \
-        -no-emul-boot -boot-load-size 4 -boot-info-table \
-        --grub2-boot-info \
+        -V "${volume_id}" \
+        -r -J -l \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
+        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -isohybrid-gpt-basdat \
         "${ISO_DIR}"
 
     sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}"
