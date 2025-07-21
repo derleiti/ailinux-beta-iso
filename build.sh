@@ -198,9 +198,6 @@ step_02_bootstrap_system() {
     sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     
     log_info "Configuring full APT sources for the new system..."
-    # KORREKTUR: Eine vollständige sources.list wird erstellt, um sicherzustellen,
-    # dass alle notwendigen Komponenten (main, restricted, universe, multiverse)
-    # von Anfang an verfügbar sind. Dies behebt den Fehler "Package 'dialog' has no installation candidate".
     sudo tee "${CHROOT_DIR}/etc/apt/sources.list" > /dev/null <<'EOF'
 deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
 deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
@@ -223,6 +220,10 @@ EOF
         # Configure basic locale and APT
         apt-get update
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release
+
+        # HINZUGEFÜGT: AILinux-Repository hinzufügen
+        log_info 'Adding AILinux custom repository...'
+        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
         
         # Setup locales
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
@@ -263,7 +264,7 @@ step_03_install_packages() {
             plymouth-theme-spinner ubuntu-standard \
             keyboard-configuration console-setup \
             sudo systemd systemd-sysv dbus init rsyslog \
-            systemd-coredump grub-pc grub-efi-amd64 shim-signed
+            systemd-coredump grub-efi-amd64 shim-signed
         
         # Install complete KDE desktop
         apt-get install -y \
