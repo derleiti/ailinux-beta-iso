@@ -1,3 +1,140 @@
+AILinux Beta ISO Builder
+
+
+
+Version: 18.0Codename: Premium AI EditionAuthor: @derleiti
+
+🚀 Übersicht
+
+Dieses Repository enthält das vollständige Buildsystem zur Erstellung einer AILinux Live-ISO, basierend auf Ubuntu 24.04 (Noble) und erweitert um:
+
+🧠 KI-Funktionen über Mixtral (aihelp)
+
+🖥️ Vollständige KDE Plasma-Desktopumgebung
+
+⚙️ Automatischer Installer via Calamares
+
+🔧 Eigene Tools, Branding und Post-Install-Hooks
+
+🪄 Offlinefähig & systemdiagnosebereit per Terminal
+
+🧰 Voraussetzungen
+
+Betriebssystem
+
+Ubuntu/Debian-basiertes Hostsystem (getestet unter Ubuntu 24.04)
+
+Abhängigkeiten
+
+sudo apt install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
+  mtools dosfstools isolinux syslinux-common shim-signed gnupg \
+  git curl jq python3 python3-pip python3-venv
+
+🔐 .env Datei (für KI-Integration)
+
+Erstelle eine .env-Datei im Projektverzeichnis mit folgendem Inhalt:
+
+MISTRALAPIKEY=your_mixtral_api_key_here
+
+Tipp: Nutze cp .env.example .env als Vorlage.
+
+🛠️ Build starten
+
+./build.sh
+
+Nach dem erfolgreichen Durchlauf findest du:
+
+ailinux-24.04-premium-amd64.iso
+
+ailinux-24.04-premium-amd64.iso.sha256
+
+ailinux-build-info.txt
+
+🧠 AI-Funktionen: aihelp
+
+Nach dem Booten der Live-ISO:
+
+aihelp "Warum startet mein Netzwerkdienst nicht?"
+aihelp --sysinfo
+aihelp --log /var/log/syslog
+
+Beispielausgabe:
+
+### 🚨 Problem Summary
+Der Netzwerkdienst startet nicht zuverlässig beim Booten.
+
+### ⚙️ Likely Cause
+Möglicherweise fehlt eine Abhängigkeit oder der NetworkManager ist nicht aktiviert...
+
+### ✅ Suggested Solution
+```bash
+sudo systemctl enable NetworkManager
+sudo systemctl restart NetworkManager
+
+
+---
+
+## 📦 Enthaltene Komponenten
+
+### Desktop
+- KDE Plasma (kde-full)
+- SDDM Autologin mit Live-User
+- Anwendungen: Firefox, Chrome, LibreOffice, VLC, GIMP, VS Code, Wine, Konsole u.v.m.
+
+### Calamares
+- Voll konfiguriert mit eigenem Branding
+- Postinstall-Skript kopiert `.env` & aktiviert KI-Hinweis im Zielsystem
+
+### Bootloader
+- ISOLINUX (BIOS)
+- GRUB2 + Shim (UEFI, Secure Boot ready)
+- EFI-Image `efi.img` eingebunden
+
+---
+
+## 🧪 Build testen
+
+```bash
+qemu-system-x86_64 -cdrom ailinux-24.04-premium-amd64.iso -m 4096 -enable-kvm
+
+🧵 Claude Prompt zur Replikation
+
+Prompt für Claude.ai oder andere LLMs:
+
+"""
+Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-ISO basierend auf Ubuntu 24.04. Die Distribution heißt AILinux und enthält:
+
+KDE Plasma Desktop
+
+Calamares Installer mit eigenem Branding (Logo, Farben, Texte)
+
+Einen Live-Benutzer mit Autologin
+
+Eine eigene CLI-Integration namens aihelp, die über die Mixtral API mit einem Key aus .env kommuniziert
+
+Die Funktionalität, Logdateien zu analysieren, Systeminfos zu liefern und Fehler mit Markdown-strukturierten Antworten auszugeben
+
+Die KI-Funktionalität soll automatisch beim Installieren aktiviert werden (durch Postinstall Hook im Calamares Installer)
+
+Nutze zstd-komprimiertes SquashFS
+
+Erzeuge ein funktionierendes ISO-Image mit BIOS+UEFI-Boot
+
+Stelle sicher, dass das Skript robust ist, .env prüft und im Fehlerfall abbricht. Benenne die finale ISO-Datei automatisch und gib nach dem Build eine Build-Info mit Zeitstempel und Feature-Übersicht aus.
+"""
+
+📄 Lizenz
+
+MIT License(c) 2024 derleiti / AILinux Project
+
+🔗 Links
+
+🔗 Website
+
+🧠 Mixtral API
+
+🐙 GitHub: AILinux Beta ISO
+
 # AILinux - The Intelligent Linux Environment
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)

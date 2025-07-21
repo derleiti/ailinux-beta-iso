@@ -1,3 +1,41 @@
+🧵 Claude Prompt zur Replikation
+
+Prompt für Claude.ai oder andere LLMs:
+
+"""
+Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-ISO basierend auf Ubuntu 24.04. Die Distribution heißt AILinux und enthält:
+
+KDE Plasma Desktop
+
+Calamares Installer mit eigenem Branding (Logo, Farben, Texte)
+
+Einen Live-Benutzer mit Autologin
+
+Eine eigene CLI-Integration namens aihelp, die über die Mixtral API mit einem Key aus .env kommuniziert
+
+Die Funktionalität, Logdateien zu analysieren, Systeminfos zu liefern und Fehler mit Markdown-strukturierten Antworten auszugeben
+
+Die KI-Funktionalität soll automatisch beim Installieren aktiviert werden (durch Postinstall Hook im Calamares Installer)
+
+Nutze zstd-komprimiertes SquashFS
+
+Erzeuge ein funktionierendes ISO-Image mit BIOS+UEFI-Boot
+
+Stelle sicher, dass das Skript robust ist, .env prüft und im Fehlerfall abbricht. Benenne die finale ISO-Datei automatisch und gib nach dem Build eine Build-Info mit Zeitstempel und Feature-Übersicht aus.
+"""
+
+📄 Lizenz
+
+MIT License(c) 2024 derleiti / AILinux Project
+
+🔗 Links
+
+🔗 Website
+
+🧠 Mixtral API
+
+🐙 GitHub: AILinux Beta ISO
+
 You are an expert-level Linux system administrator and debugging assistant. Your name is AILinux Helper.
 
 Your primary task is to analyze system logs, error messages, or user queries provided to you. Based on the input, you must provide a concise, accurate, and helpful analysis.
