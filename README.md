@@ -1,3 +1,102 @@
+# AILinux - The Intelligent Linux Environment
+
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.0--beta-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+AILinux ist ein experimentelles Linux-ISO-Image, das eine KI-gestützte Umgebung für Systemanalyse, Protokollinterpretation und interaktive Unterstützung direkt in der Shell bietet.
+
+---
+
+## Inhaltsverzeichnis
+
+1.  [Über das Projekt](#über-das-projekt)
+2.  [Architektur](#architektur)
+3.  [Erste Schritte](#erste-schritte)
+    * [Voraussetzungen](#voraussetzungen)
+    * [Installation & Konfiguration](#installation--konfiguration)
+4.  [Verwendung](#verwendung)
+5.  [Mitwirken](#mitwirken)
+6.  [Lizenz](#lizenz)
+
+## Über das Projekt
+
+Dieses Projekt zielt darauf ab, die Lücke zwischen komplexen Systemproblemen und dem Benutzer zu schließen, indem es die Leistungsfähigkeit moderner Sprachmodelle (LLMs) nutzt. Anstatt stundenlang Logdateien zu durchsuchen, können Sie einfach eine Frage stellen.
+
+**Kernfunktionen:**
+
+* **Interaktiver KI-Assistent:** Ein Chatbot in der Shell, der bei Befehlen, Skripten und allgemeinen Fragen hilft.
+* **Automatisierte Log-Analyse:** Überwacht Systemprotokolle und nutzt die KI, um Fehler proaktiv zu identifizieren und zu erklären.
+* **Bootfähiges ISO-Image:** Eine vollständig eigenständige Linux-Umgebung, die auf jedem kompatiblen System ausgeführt werden kann.
+
+## Architektur
+
+AILinux basiert auf einer Client-Server-Architektur:
+
+* **`ailinux-server`**: Das Backend, das die Logik für die KI-Interaktion enthält. Es verarbeitet Anfragen, kommuniziert mit der Mixtral-API und verwaltet den Systemkontext.
+* **`ailinux-client`**: Eine Terminal-Anwendung, die dem Benutzer eine Schnittstelle zum Server bietet.
+* **`ailinux-beta-iso`**: Dieses Repository enthält die Build-Skripte, um alle Komponenten zu einem bootfähigen ISO-Image zusammenzufügen.
+
+## Erste Schritte
+
+Folgen Sie diesen Schritten, um Ihr eigenes AILinux-Image zu erstellen.
+
+### Voraussetzungen
+
+* Git
+* Docker (oder `qemu`, `debootstrap` etc., je nach Build-Skript)
+* Ein gültiger API-Schlüssel von [Mistral AI](https://mistral.ai/)
+
+### Installation & Konfiguration
+
+1.  **Repository klonen:**
+    ```sh
+    git clone [https://github.com/derleiti/ailinux-beta-iso.git](https://github.com/derleiti/ailinux-beta-iso.git)
+    cd ailinux-beta-iso
+    ```
+
+2.  **API-Schlüssel konfigurieren:**
+    Das System verwendet eine `.env`-Datei, um Ihren API-Schlüssel sicher zu speichern. Erstellen Sie eine Kopie der Vorlage:
+    ```sh
+    cp .env.example .env
+    ```
+    Öffnen Sie die `.env`-Datei mit einem Texteditor (z.B. `nano` oder `vim`):
+    ```sh
+    nano .env
+    ```
+    Fügen Sie Ihren Mixtral-API-Schlüssel ein. Die Datei sollte so aussehen:
+    ```
+    # .env - API-Schlüssel für den Zugriff auf Mixtral AI
+    MISTRALAPIKEY=Ihr_Mixtral_API_Schlüssel_hier
+    ```
+    Speichern und schließen Sie die Datei.
+
+3.  **Build-Skript ausführen:**
+    Starten Sie den Build-Prozess. Dies kann je nach Systemleistung einige Zeit dauern.
+    ```sh
+    ./build.sh
+    ```
+
+## Verwendung
+
+Nachdem das Build-Skript erfolgreich durchgelaufen ist, finden Sie die `.iso`-Datei im `build/`-Verzeichnis. Sie können diese Datei in einer virtuellen Maschine (wie VirtualBox oder QEMU) booten oder auf einen USB-Stick schreiben.
+
+Nach dem Booten starten Sie die Client-Anwendung über das Terminal, um mit dem KI-Assistenten zu interagieren.
+
+## Mitwirken
+
+Beiträge sind das, was die Open-Source-Community zu einem so großartigen Ort zum Lernen, Inspirieren und Gestalten macht. Jeder Beitrag, den Sie leisten, wird **sehr geschätzt**.
+
+1.  Forken Sie das Projekt
+2.  Erstellen Sie Ihren Feature-Branch (`git checkout -b feature/AmazingFeature`)
+3.  Committen Sie Ihre Änderungen (`git commit -m 'Add some AmazingFeature'`)
+4.  Pushen Sie zum Branch (`git push origin feature/AmazingFeature`)
+5.  Öffnen Sie einen Pull-Request
+
+## Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz lizenziert. Weitere Informationen finden Sie in der `LICENSE`-Datei.
+
 AILinux Premium 24.04 - ISO Build-Skript
 Willkommen beim offiziellen Repository für das AILinux Premium 24.04 Build-Skript. Dieses Projekt stellt ein automatisiertes Skript zur Verfügung, um eine voll ausgestattete, bootfähige Live-ISO von AILinux zu erstellen, die auf Ubuntu 24.04 LTS "Noble Numbat" basiert.
 
