@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.5
+# AILinux ISO Build Script v16.6
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now includes an automatic
-# dependency installation prompt and a fix for the chroot mount command.
+# based on Ubuntu 24.04 (noble). It includes fixes for the repository
+# port number and the installation of the 'tzdata' package.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -240,11 +240,13 @@ EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-apt-get install -y --no-install-recommends locales curl ca-certificates
+# FIX: Added tzdata to the installation list
+apt-get install -y --no-install-recommends locales curl ca-certificates tzdata
 
 # Add AILinux repository
 echo "Füge AILinux Repository hinzu..."
-curl -fssSL https://ailinux.me:84443/mirror/add-ailinux-repo.sh | bash
+# FIX: Corrected port from 84443 to 8443
+curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
 echo "Repository hinzugefügt. Aktualisiere Paketlisten erneut..."
 
 # Update package list again to include the new repo
