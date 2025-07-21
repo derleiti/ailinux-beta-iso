@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.3
+# AILinux ISO Build Script v16.4
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble).
+# based on Ubuntu 24.04 (noble). It now includes an automatic
+# dependency installation prompt.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -75,7 +76,7 @@ check_sudo() {
     log_info "Sudo-Rechte überprüft. Originalbenutzer: ${ORIGINAL_USER}"
 }
 
-# Check for required tools
+# Check for required tools and offer to install them
 check_dependencies() {
     log_info "Überprüfe Abhängigkeiten..."
     local missing_deps=()
@@ -87,10 +88,24 @@ check_dependencies() {
     done
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
-        log_error "Fehlende Abhängigkeiten: ${missing_deps[*]}. Bitte installieren Sie diese mit: sudo apt install ${missing_deps[*]}"
+        log_warn "Fehlende Abhängigkeiten gefunden: ${missing_deps[*]}"
+        read -p "Sollen diese automatisch via 'apt' installiert werden? (j/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Jj]$ ]]; then
+            log_info "Installiere fehlende Abhängigkeiten..."
+            sudo apt-get update
+            if ! sudo apt-get install -y "${missing_deps[@]}"; then
+                log_error "Installation der Abhängigkeiten fehlgeschlagen. Bitte manuell installieren und das Skript erneut ausführen."
+            fi
+            log_info "Abhängigkeiten erfolgreich installiert."
+        else
+            log_error "Abbruch durch Benutzer. Bitte installieren Sie die Abhängigkeiten manuell: sudo apt install ${missing_deps[*]}"
+        fi
+    else
+        log_info "Alle Abhängigkeiten sind vorhanden."
     fi
-    log_info "Alle Abhängigkeiten sind vorhanden."
 }
+
 
 # Safe mount function with retries
 safe_mount() {
@@ -224,7 +239,7 @@ EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-apt-get install -y locales curl ca-certificates
+apt-get install -y --no-install-recommends locales curl ca-certificates
 
 # Add AILinux repository
 echo "Füge AILinux Repository hinzu..."
@@ -246,7 +261,7 @@ log_step "5/12: Installiere Kernel und Live-Boot-Pakete"
 sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
 set -e
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y \
+apt-get install -y --no-install-recommends \
     linux-image-generic \
     casper lupin-casper \
     network-manager net-tools wireless-tools \
@@ -269,7 +284,7 @@ dpkg --add-architecture i386
 apt-get update
 
 # Install full application suite including German language packs
-apt-get install -y \
+apt-get install -y --no-install-recommends \
     sddm \
     kde-plasma-desktop \
     konsole \
