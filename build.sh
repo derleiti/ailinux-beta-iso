@@ -1,13 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.7
+# AILinux ISO Build-Skript (v16.0)
+# Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat).
 #
-# This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now supports a .env file for configuration
-# and can automatically commit and push the build script to a Git repository
-# after a successful build.
-#
-# Copyright (c) 2024 Your Name/Project
+# Lizenz: MIT License
+# Copyright (c) 2024 derleiti
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,332 +24,254 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-# --- Configuration ---
-set -eo pipefail # Exit on error
+# Strikter Fehlermodus: Bricht bei Fehlern, nicht gesetzten Variablen und Fehlern in Pipelines ab.
+set -eo pipefail
 
-# Script Variables
-AILINUX_VERSION="24.04"
+# --- Konfiguration ---
 DISTRO_NAME="AILinux"
-BASE_DISTRO="noble"
-LIVE_USER="ailinux"
-HOSTNAME="ailinux"
-# Official Ubuntu mirror for the initial bootstrap
-OFFICIAL_UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu"
-# Git repository for automatic commits
-GIT_REMOTE_URL="https://github.com/derleiti/ailinux-beta-iso"
+DISTRO_VERSION="24.04"
+UBUNTU_CODENAME="noble"
+ARCHITECTURE="amd64"
 
-# Build Directories
-BUILD_DIR="$(pwd)/AILINUX_BUILD"
+LIVE_USER="ailinux"
+LIVE_HOSTNAME="ailinux"
+
+BUILD_DIR="AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
-ISO_NAME="ailinux-${AILINUX_VERSION}-amd64.iso"
+ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-${ARCHITECTURE}.iso"
 
-# --- Logging and Colors ---
+# --- Farb- und Logging-Funktionen ---
 COLOR_RESET='\033[0m'
-COLOR_RED='\033[0;31m'
-COLOR_GREEN='\033[0;32m'
-COLOR_YELLOW='\033[0;33m'
-COLOR_BLUE='\033[0;34m'
-COLOR_CYAN='\033[0;36m'
+COLOR_INFO='\033[0;34m'
+COLOR_SUCCESS='\033[0;32m'
+COLOR_WARN='\033[0;33m'
+COLOR_ERROR='\033[0;31m'
+COLOR_STEP='\033[1;36m'
 
-log_msg() {
-    local color="$1"
-    local level="$2"
+log() {
+    local level_color="$1"
+    local level_text="$2"
     local message="$3"
-    echo -e "${color}[$(date +'%Y-%m-%d %H:%M:%S')] [${level}] ${message}${COLOR_RESET}"
+    echo -e "$(date '+%Y-%m-%d %H:%M:%S') ${level_color}[${level_text}]${COLOR_RESET} ${message}"
 }
 
-log_info() { log_msg "${COLOR_GREEN}" "INFO" "$1"; }
-log_warn() { log_msg "${COLOR_YELLOW}" "WARN" "$1"; }
-log_error() { log_msg "${COLOR_RED}" "ERROR" "$1"; exit 1; }
-log_step() { log_msg "${COLOR_CYAN}" "STEP" "===== $1 ====="; }
+log_info() { log "${COLOR_INFO}" "INFO" "$1"; }
+log_success() { log "${COLOR_SUCCESS}" "SUCCESS" "$1"; }
+log_warn() { log "${COLOR_WARN}" "WARNING" "$1"; }
+log_error() { log "${COLOR_ERROR}" "ERROR" "$1"; }
+log_step() { log "${COLOR_STEP}" "STEP ${1}" "-------------------- ${2} --------------------"; }
 
-# --- Helper Functions ---
+# --- Sicherheits- und Hilfsfunktionen ---
 
-# Load environment variables from .env file
-load_env() {
-    if [ -f "$(pwd)/.env" ]; then
-        log_info "Lade Umgebungsvariablen aus .env Datei..."
-        source "$(pwd)/.env"
-    else
-        log_info "Keine .env Datei gefunden, überspringe."
-    fi
-}
-
-# Check for root/sudo privileges
-check_sudo() {
+# Überprüft, ob das Skript als root ausgeführt wird.
+check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
-        log_error "Dieses Skript darf nicht als root ausgeführt werden. Bitte als normaler Benutzer mit sudo-Rechten ausführen."
-    fi
-    if ! sudo -v; then
-        log_error "Sudo-Authentifizierung fehlgeschlagen. Bitte stellen Sie sicher, dass Sie sudo-Rechte haben."
-    fi
-    ORIGINAL_USER=${SUDO_USER:-$(whoami)}
-    log_info "Sudo-Rechte überprüft. Originalbenutzer: ${ORIGINAL_USER}"
-}
-
-# Check for required tools and offer to install them
-check_dependencies() {
-    log_info "Überprüfe Abhängigkeiten..."
-    local missing_deps=()
-    # Added 'git' for the auto-commit feature
-    local deps=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "curl" "gpg" "git")
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            missing_deps+=("$dep")
-        fi
-    done
-
-    if [ ${#missing_deps[@]} -ne 0 ]; then
-        log_warn "Fehlende Abhängigkeiten gefunden: ${missing_deps[*]}"
-        read -p "Sollen diese automatisch via 'apt' installiert werden? (j/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Jj]$ ]]; then
-            log_info "Installiere fehlende Abhängigkeiten..."
-            sudo apt-get update
-            if ! sudo apt-get install -y "${missing_deps[@]}"; then
-                log_error "Installation der Abhängigkeiten fehlgeschlagen. Bitte manuell installieren und das Skript erneut ausführen."
-            fi
-            log_info "Abhängigkeiten erfolgreich installiert."
-        else
-            log_error "Abbruch durch Benutzer. Bitte installieren Sie die Abhängigkeiten manuell: sudo apt install ${missing_deps[*]}"
-        fi
-    else
-        log_info "Alle Abhängigkeiten sind vorhanden."
+        log_error "Dieses Skript darf nicht als root ausgeführt werden. Es verwendet bei Bedarf 'sudo'."
+        exit 1
     fi
 }
 
-
-# Safe mount function with retries
-safe_mount() {
-    local type="$1"
-    local source="$2"
-    local target="$3"
-    local options="${4:--o bind}"
-    local attempts=5
-    local delay=2
-
-    for ((i=1; i<=attempts; i++)); do
-        if sudo mount ${options} "${source}" "${target}"; then
-            log_info "Mount erfolgreich: ${target}"
-            return 0
-        fi
-        log_warn "Mount von ${target} fehlgeschlagen (Versuch $i/$attempts). Wiederhole in ${delay}s..."
-        sleep ${delay}
-    done
-    log_error "Konnte ${target} nach ${attempts} Versuchen nicht mounten."
-}
-
-# Safe unmount function with retries
+# Sichere Unmount-Funktion, versucht mehrfach.
 safe_umount() {
-    local target="$1"
-    local attempts=5
-    local delay=2
-
-    if ! mountpoint -q "${target}"; then
-        log_warn "Unmount übersprungen: ${target} ist nicht gemountet."
+    local mount_point="$1"
+    if ! findmnt -rno TARGET "$mount_point" > /dev/null; then
+        log_info "Mountpunkt '$mount_point' ist bereits unmounted."
         return 0
     fi
-
-    for ((i=1; i<=attempts; i++)); do
-        if sudo umount -lf "${target}"; then
-            log_info "Unmount erfolgreich: ${target}"
+    log_info "Unmounte '$mount_point'..."
+    local attempts=5
+    while [ $attempts -gt 0 ]; do
+        if sudo umount -l "$mount_point"; then
+            log_success "Unmount von '$mount_point' erfolgreich."
             return 0
         fi
-        log_warn "Unmount von ${target} fehlgeschlagen (Versuch $i/$attempts). Wiederhole in ${delay}s..."
-        sleep ${delay}
+        log_warn "Unmount von '$mount_point' fehlgeschlagen. Versuche es in 3 Sekunden erneut..."
+        sleep 3
+        ((attempts--))
     done
-    log_error "Konnte ${target} nach ${attempts} Versuchen nicht unmounten."
+    log_error "Konnte '$mount_point' nach mehreren Versuchen nicht unmounten."
+    return 1
 }
 
-# Cleanup function to be called on exit or error
+# Bereinigungsfunktion für Notfälle und nach dem Build.
 cleanup() {
-    log_step "Aufräumen"
+    log_warn "Starte Bereinigung..."
+    # Deaktiviere den strikten Fehlermodus für die Bereinigung
+    set +e
 
     safe_umount "${CHROOT_DIR}/dev/pts"
     safe_umount "${CHROOT_DIR}/dev"
     safe_umount "${CHROOT_DIR}/proc"
     safe_umount "${CHROOT_DIR}/sys"
-    
-    if findmnt -R "${BUILD_DIR}"; then
-        log_warn "Es sind noch Mount-Punkte im Build-Verzeichnis vorhanden. Versuche zwangsweises Unmounten."
-        sudo umount -R -f -l "${BUILD_DIR}" || log_warn "Zwangsweises Unmounten nicht vollständig erfolgreich."
-    fi
+    safe_umount "${CHROOT_DIR}/run"
 
-    log_info "Entferne Build-Verzeichnis: ${BUILD_DIR}"
-    sudo rm -rf "${BUILD_DIR}"
-    log_info "Aufräumen abgeschlossen."
+    if [ -d "${BUILD_DIR}" ]; then
+        log_info "Entferne Build-Verzeichnis: ${BUILD_DIR}"
+        sudo rm -rf "${BUILD_DIR}"
+        log_success "Bereinigung abgeschlossen."
+    fi
 }
 
-# --- Main Script ---
+# Trap, um bei Skript-Abbruch automatisch aufzuräumen.
+trap 'log_error "Skript unerwartet beendet."; cleanup; exit 1' INT TERM ERR
 
-if [ "$1" == "--cleanup" ]; then
-    log_info "Manuelles Aufräumen angefordert."
-    if [ -d "${BUILD_DIR}" ]; then
-        cleanup
-    else
-        log_warn "Build-Verzeichnis ${BUILD_DIR} nicht gefunden. Nichts zu tun."
-    fi
-    exit 0
-fi
+# --- Build-Schritte als Funktionen ---
 
-trap 'cleanup' EXIT SIGINT SIGTERM
+step_01_setup_environment() {
+    log_step "1/12" "Umgebung einrichten und Abhängigkeiten prüfen"
+    
+    # Notwendige Pakete prüfen
+    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common")
+    for dep in "${dependencies[@]}"; do
+        if ! command -v "$dep" &> /dev/null; then
+            log_error "Fehlende Abhängigkeit: '$dep'. Bitte installieren Sie es (z.B. mit 'sudo apt install $dep')."
+            exit 1
+        fi
+    done
+    log_info "Alle Abhängigkeiten sind vorhanden."
 
-# --- STEP 1: Initial Setup ---
-log_step "1/12: Initialisierung und Setup"
-load_env
-check_sudo
-check_dependencies
-
-if [ -d "${BUILD_DIR}" ]; then
-    log_warn "Build-Verzeichnis ${BUILD_DIR} existiert bereits."
-    read -p "Möchten Sie es löschen und neu beginnen? (j/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Jj]$ ]]; then
-        log_error "Abbruch durch Benutzer."
-    fi
+    # Build-Verzeichnisstruktur erstellen
     sudo rm -rf "${BUILD_DIR}"
-fi
+    mkdir -p "${BUILD_DIR}"
+    sudo chown "$(whoami)":"$(whoami)" "${BUILD_DIR}"
+    mkdir -p "${CHROOT_DIR}" "${ISO_DIR}"
+    log_success "Build-Umgebung erfolgreich eingerichtet."
+}
 
-mkdir -p "${BUILD_DIR}" "${ISO_DIR}" "${CHROOT_DIR}"
-log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
+step_02_debootstrap() {
+    log_step "2/12" "Basissystem mit debootstrap erstellen"
+    sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
+    log_success "Basissystem erfolgreich erstellt."
+}
 
-# --- STEP 2: Debootstrap Base System ---
-log_step "2/12: Erstelle Basissystem mit Debootstrap vom offiziellen Mirror"
-sudo debootstrap \
-    --arch=amd64 \
-    --variant=minbase \
-    "${BASE_DISTRO}" \
-    "${CHROOT_DIR}" \
-    "${OFFICIAL_UBUNTU_MIRROR}"
-log_info "Basissystem für ${BASE_DISTRO} erfolgreich erstellt."
+step_03_mount_filesystems() {
+    log_step "3/12" "Pseudo-Dateisysteme einhängen"
+    sudo mount --bind /dev "${CHROOT_DIR}/dev"
+    sudo mount --bind /dev/pts "${CHROOT_DIR}/dev/pts"
+    sudo mount -t proc proc "${CHROOT_DIR}/proc"
+    sudo mount -t sysfs sysfs "${CHROOT_DIR}/sys"
+    sudo mount -t tmpfs tmpfs "${CHROOT_DIR}/run"
+    
+    # DNS-Auflösung für chroot sicherstellen
+    sudo cp /etc/resolv.conf "${CHROOT_DIR}/etc/"
+    log_success "Alle Pseudo-Dateisysteme erfolgreich eingehängt."
+}
 
-# --- STEP 3: Chroot-Vorbereitung ---
-log_step "3/12: Bereite die Chroot-Umgebung vor"
-sudo cp /etc/hosts "${CHROOT_DIR}/etc/hosts"
-sudo cp /etc/resolv.conf "${CHROOT_DIR}/etc/resolv.conf"
+step_04_chroot_base_config() {
+    log_step "4/12" "Chroot: Basiskonfiguration"
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        # Hostname setzen
+        echo "ailinux" > /etc/hostname
 
-safe_mount "proc" "proc" "${CHROOT_DIR}/proc" "-t proc"
-safe_mount "sysfs" "sysfs" "${CHROOT_DIR}/sys" "-t sysfs"
-safe_mount "/dev" "/dev" "${CHROOT_DIR}/dev"
-safe_mount "/dev/pts" "/dev/pts" "${CHROOT_DIR}/dev/pts"
-
-# --- STEP 4: Systemkonfiguration und Wechsel zum AILinux Mirror ---
-log_step "4/12: Konfiguriere System & wechsle zum AILinux Mirror"
-sudo chroot "${CHROOT_DIR}" /bin/bash << EOF
-set -e
-export DEBIAN_FRONTEND=noninteractive
-export HOME=/root
-export LC_ALL=C
-
-# Set hostname
-echo "${HOSTNAME}" > /etc/hostname
-
-# Install prerequisites using the official mirror first
-apt-get update
-apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget zstd
-
-# Add AILinux repository and switch to AILinux mirror
-echo "Füge AILinux Repository hinzu und wechsle zum Mirror..."
-curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
-echo "Repository hinzugefügt und Mirror gewechselt. Aktualisiere Paketlisten erneut..."
-
-# Update package list again, now using the fast AILinux mirror
-apt-get update
-
-# Configure locales and timezone
-locale-gen en_US.UTF-8 de_DE.UTF-8
-update-locale LANG=de_DE.UTF-8
-dpkg-reconfigure --frontend=noninteractive tzdata
+        # APT-Quellen konfigurieren
+        cat > /etc/apt/sources.list << "SOURCES"
+deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+SOURCES
+        
+        # APT aktualisieren
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update
 EOF
-log_info "Systemkonfiguration und Wechsel zum AILinux Mirror abgeschlossen."
+    log_success "Basiskonfiguration im Chroot abgeschlossen."
+}
 
-# --- STEP 5: Kernel und Live-Boot-Pakete installieren ---
-log_step "5/12: Installiere Kernel und Live-Boot-Pakete"
-sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
-set -e
-export DEBIAN_FRONTEND=noninteractive
-apt-get install -y --no-install-recommends \
-    linux-image-generic \
-    casper \
-    network-manager net-tools wireless-tools \
-    plymouth plymouth-theme-kubuntu-logo \
-    ubuntu-standard \
-    grub-pc-bin grub-efi-amd64-bin shim-signed \
-    syslinux-common isolinux \
-    discover
+step_05_chroot_kernel_core() {
+    log_step "5/12" "Chroot: Kernel und Core-System installieren"
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y --no-install-recommends \
+            linux-image-generic \
+            casper \
+            lupin-casper \
+            discover \
+            network-manager \
+            plymouth \
+            plymouth-theme-ubuntu-logo \
+            ubuntu-standard \
+            locales \
+            keyboard-configuration \
+            console-setup
 EOF
-log_info "Kernel und Live-Boot-Pakete installiert."
+    log_success "Kernel und Core-System installiert."
+}
 
-# --- STEP 6: KDE Desktop und Anwendungen installieren ---
-log_step "6/12: Installiere KDE Plasma Desktop und umfangreiche Anwendungen"
-sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
-set -e
-export DEBIAN_FRONTEND=noninteractive
-
-# Enable i386 architecture for Wine and Steam
-dpkg --add-architecture i386
-apt-get update
-
-# Install full application suite including German language packs
-apt-get install -y --no-install-recommends \
-    sddm \
-    kde-full \
-    cups \
-    samba \
-    language-pack-de \
-    language-pack-kde-de \
-    firefox \
-    google-chrome-stable \
-    thunderbird \
-    vlc \
-    gimp \
-    libreoffice \
-    libreoffice-l10n-de \
-    winehq-staging \
-    winetricks \
-    steam-installer
+step_06_chroot_desktop() {
+    log_step "6/12" "Chroot: KDE Desktop und Anwendungen installieren"
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y --no-install-recommends \
+            kde-standard \
+            sddm \
+            konsole \
+            firefox \
+            vlc \
+            libreoffice-calc \
+            libreoffice-writer \
+            libreoffice-impress
 EOF
-log_info "KDE Plasma und umfangreiche Anwendungs-Suite installiert."
+    log_success "KDE Desktop und Anwendungen installiert."
+}
 
-# --- STEP 7: Calamares Installer installieren und konfigurieren ---
-log_step "7/12: Installiere und konfiguriere Calamares"
-sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
-set -e
-export DEBIAN_FRONTEND=noninteractive
-apt-get install -y calamares
-
-# Configure Calamares branding
-if [ -f /etc/calamares/settings.conf ]; then
-    sed -i 's/^branding:.*$/branding: ailinux/' /etc/calamares/settings.conf
-    echo "Calamares branding auf 'ailinux' gesetzt."
-else
-    echo "WARNUNG: /etc/calamares/settings.conf nicht gefunden."
-fi
+step_07_chroot_calamares() {
+    log_step "7/12" "Chroot: Calamares Installer einrichten"
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        
+        # Calamares und Ubuntu-spezifische Module installieren
+        apt-get install -y calamares calamares-settings-ubuntu
+        
+        # Branding für AILinux setzen
+        # Hinweis: Die genauen Keys können sich ändern. Dies ist ein Beispiel.
+        sed -i 's/^branding:.*/branding: ailinux/' /etc/calamares/settings.conf
+        
+        # Ein eigenes Branding-Modul wäre der nächste Schritt
+        # Hier eine einfache Anpassung des Produktnamens
+        cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
+[Branding]
+componentName: ailinux
+productName: AILinux 24.04
+shortProductName: AILinux
+productUrl: https://github.com/derleiti/ailinux-beta-iso
+supportUrl: https://github.com/derleiti/ailinux-beta-iso/issues
+productLogo: "/usr/share/calamares/branding/ailinux/logo.png"
+productIcon: "/usr/share/calamares/branding/ailinux/icon.png"
+BRANDING
+        
+        # Platzhalter-Bilder erstellen (ersetzen Sie diese durch Ihre eigenen)
+        mkdir -p /usr/share/calamares/branding/ailinux/
+        convert -size 220x100 xc:gray +antialias -font "DejaVu-Sans-Bold" -pointsize 30 -draw "gravity center text 0,0 'AILinux'" /usr/share/calamares/branding/ailinux/logo.png
+        convert -size 32x32 xc:gray +antialias -font "DejaVu-Sans-Bold" -pointsize 10 -draw "gravity center text 0,0 'AI'" /usr/share/calamares/branding/ailinux/icon.png
 EOF
-log_info "Calamares installiert und konfiguriert."
+    log_success "Calamares Installer konfiguriert."
+}
 
-# --- STEP 8: Benutzer einrichten und Anpassungen ---
-log_step "8/12: Richte Live-Benutzer ein und führe Anpassungen durch"
-sudo chroot "${CHROOT_DIR}" /bin/bash <<EOF
-set -e
-export DEBIAN_FRONTEND=noninteractive
+step_08_chroot_user_setup() {
+    log_step "8/12" "Chroot: Live-Benutzer und Autologin einrichten"
+    sudo chroot "${CHROOT_DIR}" /bin/bash -c "export LIVE_USER=${LIVE_USER}" <<'EOF'
+        set -e
+        # Live-Benutzer erstellen
+        useradd -s /bin/bash -d "/home/${LIVE_USER}" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,sambashare "${LIVE_USER}"
+        # Passwort deaktivieren (leeres Passwort)
+        passwd -d "${LIVE_USER}"
 
-# Create live user
-useradd -s /bin/bash -d /home/${LIVE_USER} -m -G sudo,adm,cdrom,dip,plugdev,lpadmin,sambashare ${LIVE_USER}
-echo "${LIVE_USER}:" | chpasswd # Set empty password
-
-# Configure SDDM autologin
-mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/autologin.conf <<EOL
+        # SDDM Autologin konfigurieren
+        mkdir -p /etc/sddm.conf.d
+        cat > /etc/sddm.conf.d/autologin.conf << AUTOLOGIN_CONF
 [Autologin]
 User=${LIVE_USER}
 Session=plasma-x11.desktop
-EOL
+AUTOLOGIN_CONF
 
-# Create Calamares desktop launcher
-mkdir -p /home/${LIVE_USER}/Desktop
-cat > /home/${LIVE_USER}/Desktop/install.desktop <<EOL
+        # Calamares Desktop-Launcher erstellen
+        mkdir -p "/home/${LIVE_USER}/Desktop"
+        cat > "/home/${LIVE_USER}/Desktop/Install AILinux.desktop" << DESKTOP_FILE
 [Desktop Entry]
 Name=Install AILinux
 Comment=Install AILinux to your hard drive
@@ -361,202 +280,178 @@ Icon=calamares
 Terminal=false
 Type=Application
 Categories=System;
-EOL
-chmod +x /home/${LIVE_USER}/Desktop/install.desktop
-chown -R ${LIVE_USER}:${LIVE_USER} /home/${LIVE_USER}
-
-# Cleanup
-apt-get autoremove -y
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-rm -rf /tmp/*
-rm /etc/resolv.conf
-rm /etc/hosts
-history -c
+DESKTOP_FILE
+        
+        chmod +x "/home/${LIVE_USER}/Desktop/Install AILinux.desktop"
+        chown -R "${LIVE_USER}":"${LIVE_USER}" "/home/${LIVE_USER}"
 EOF
-log_info "Live-Benutzer und Anpassungen abgeschlossen."
+    log_success "Live-Benutzer und Autologin eingerichtet."
+}
 
-# --- STEP 9: ISO-Dateisystem vorbereiten (SquashFS) ---
-log_step "9/12: Bereite das ISO-Dateisystem vor"
-safe_umount "${CHROOT_DIR}/dev/pts"
-safe_umount "${CHROOT_DIR}/dev"
-safe_umount "${CHROOT_DIR}/proc"
-safe_umount "${CHROOT_DIR}/sys"
+step_09_chroot_cleanup() {
+    log_step "9/12" "Chroot: System bereinigen"
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        # APT-Cache leeren
+        apt-get autoremove -y
+        apt-get clean
+        
+        # Temporäre Dateien und Logs leeren
+        rm -rf /tmp/*
+        find /var/log -type f -exec truncate --size 0 {} \;
+        
+        # resolv.conf entfernen
+        rm /etc/resolv.conf
+        
+        # machine-id zurücksetzen für Live-System
+        rm /etc/machine-id
+        ln -s /var/lib/dbus/machine-id /etc/machine-id
+EOF
+    log_success "Chroot-System bereinigt."
+}
 
-mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub}
+step_10_prepare_iso_structure() {
+    log_step "10/12" "ISO-Struktur vorbereiten und SquashFS erstellen"
+    
+    # Unmount
+    safe_umount "${CHROOT_DIR}/dev/pts"
+    safe_umount "${CHROOT_DIR}/dev"
+    safe_umount "${CHROOT_DIR}/proc"
+    safe_umount "${CHROOT_DIR}/sys"
+    safe_umount "${CHROOT_DIR}/run"
+    
+    # ISO-Verzeichnisstruktur
+    mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub}
+    
+    # Kernel und Initrd kopieren
+    cp "${CHROOT_DIR}/boot/vmlinuz"*-generic "${ISO_DIR}/casper/vmlinuz"
+    cp "${CHROOT_DIR}/boot/initrd.img"*-generic "${ISO_DIR}/casper/initrd"
+    
+    # Manifest erstellen
+    sudo chroot "${CHROOT_DIR}" dpkg-query -W --showformat='${Package}\t${Version}\n' > "${ISO_DIR}/casper/filesystem.manifest"
+    
+    # SquashFS erstellen
+    log_info "Erstelle SquashFS-Abbild (dies kann einige Zeit dauern)..."
+    sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend -e boot
+    
+    # Dateigröße für den Installer
+    printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
+    
+    # Release-Notes
+    echo "${DISTRO_NAME} ${DISTRO_VERSION} (${UBUNTU_CODENAME}) - Built on $(date)" > "${ISO_DIR}/README.diskdefines"
+    
+    log_success "ISO-Struktur und SquashFS erfolgreich erstellt."
+}
 
-sudo cp "${CHROOT_DIR}/boot/vmlinuz"*-generic "${ISO_DIR}/casper/vmlinuz"
-sudo cp "${CHROOT_DIR}/boot/initrd.img"*-generic "${ISO_DIR}/casper/initrd"
-log_info "Kernel und Initrd kopiert."
-
-sudo chroot "${CHROOT_DIR}" dpkg-query -W --showformat='${Package} ${Version}\n' > "${ISO_DIR}/casper/filesystem.manifest"
-sudo cp "${ISO_DIR}/casper/filesystem.manifest" "${ISO_DIR}/casper/filesystem.manifest-desktop"
-
-log_info "Erstelle filesystem.squashfs (dies kann einige Zeit dauern)..."
-sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend -e boot
-log_info "filesystem.squashfs erfolgreich erstellt."
-
-printf $(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1) > "${ISO_DIR}/casper/filesystem.size"
-log_info "filesystem.size erstellt."
-
-# --- STEP 10: ISO-Boot-Struktur erstellen ---
-log_step "10/12: Erstelle die Boot-Struktur der ISO"
-
-cat > "${ISO_DIR}/isolinux/isolinux.cfg" << EOL
+step_11_create_bootloaders() {
+    log_step "11/12" "Bootloader (ISOLINUX für BIOS, GRUB für UEFI) erstellen"
+    
+    # ISOLINUX (BIOS)
+    cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
+    cp /usr/lib/syslinux/modules/bios/*.c32 "${ISO_DIR}/isolinux/"
+    cat > "${ISO_DIR}/isolinux/isolinux.cfg" << EOF
 UI vesamenu.c32
-TIMEOUT 50
+MENU TITLE AILinux Boot Menu
 DEFAULT live
-PROMPT 0
-MENU TITLE AILinux ${AILINUX_VERSION}
-MENU BACKGROUND splash.png
-
 LABEL live
-  MENU LABEL AILinux Live starten
+  MENU LABEL Try or Install AILinux
   KERNEL /casper/vmlinuz
   APPEND file=/cdrom/preseed/ubuntu.seed boot=casper initrd=/casper/initrd quiet splash ---
-
 LABEL check
-  MENU LABEL Integrität des Mediums prüfen
+  MENU LABEL Check disc for defects
   KERNEL /casper/vmlinuz
   APPEND boot=casper integrity-check initrd=/casper/initrd quiet splash ---
-
 LABEL memtest
-  MENU LABEL Speichertest
+  MENU LABEL Test memory
   KERNEL /isolinux/memtest
-
 LABEL hd
-  MENU LABEL Von erster Festplatte booten
+  MENU LABEL Boot from first hard disk
   LOCALBOOT 0x80
-EOL
+EOF
 
-cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOL
-if loadfont /boot/grub/font.pf2 ; then
-    set gfxmode=auto
-    insmod efi_gop
-    insmod efi_uga
-    insmod gfxterm
-    terminal_output gfxterm
-fi
+    # GRUB (UEFI)
+    cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOF
+search --no-floppy --set=root --file /README.diskdefines
 
-set menu_color_normal=white/black
-set menu_color_highlight=black/light-gray
-set timeout=5
+set timeout=10
+set default="0"
 
-menuentry "AILinux Live starten" {
-    set gfxpayload=keep
-    linux   /casper/vmlinuz file=/cdrom/preseed/ubuntu.seed boot=casper quiet splash ---
-    initrd  /casper/initrd
+menuentry "Try or Install AILinux" {
+    linux /casper/vmlinuz boot=casper file=/cdrom/preseed/ubuntu.seed quiet splash ---
+    initrd /casper/initrd
 }
-menuentry "AILinux Live (safe graphics)" {
-    set gfxpayload=keep
-    linux   /casper/vmlinuz file=/cdrom/preseed/ubuntu.seed boot=casper nomodeset quiet splash ---
-    initrd  /casper/initrd
+
+menuentry "Check disc for defects" {
+    linux /casper/vmlinuz boot=casper integrity-check quiet splash ---
+    initrd /casper/initrd
 }
-menuentry "OEM Install (für Hersteller)" {
-    set gfxpayload=keep
-    linux   /casper/vmlinuz file=/cdrom/preseed/ubuntu.seed boot=casper oem-config/enable=true quiet splash ---
-    initrd  /casper/initrd
+
+menuentry "UEFI Firmware Settings" {
+	fwsetup
 }
-EOL
+EOF
+    
+    log_success "Bootloader-Konfigurationen erstellt."
+}
 
-sudo cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
-sudo cp /usr/lib/syslinux/modules/bios/{vesamenu.c32,ldlinux.c32} "${ISO_DIR}/isolinux/"
-
-touch "${ISO_DIR}/ubuntu"
-mkdir -p "${ISO_DIR}/.disk"
-echo "AILinux ${AILINUX_VERSION} - Release amd64" > "${ISO_DIR}/.disk/info"
-mkdir -p "${ISO_DIR}/.disk/casper-uuid"
-cat /proc/sys/kernel/random/uuid > "${ISO_DIR}/.disk/casper-uuid/custom"
-
-sudo grub-mkstandalone \
-    --format=x86_64-efi \
-    --output="${ISO_DIR}/boot/grub/grubx64.efi" \
-    --locales="" --fonts="" "boot/grub/grub.cfg"
-
-mkdir -p "${ISO_DIR}/EFI/BOOT"
-sudo cp "${ISO_DIR}/boot/grub/grubx64.efi" "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
-
-(
-    cd "${ISO_DIR}"
-    sudo dd if=/dev/zero of=efiboot.img bs=1M count=20
-    sudo mkfs.vfat efiboot.img
-    sudo mmd -i efiboot.img ::/EFI
-    sudo mmd -i efiboot.img ::/EFI/BOOT
-    sudo mcopy -i efiboot.img EFI/BOOT/BOOTX64.EFI ::/EFI/BOOT/
-)
-log_info "ISO-Boot-Struktur erfolgreich erstellt."
-
-# --- STEP 11: ISO-Image generieren ---
-log_step "11/12: Generiere die bootfähige ISO-Datei"
-log_info "Erstelle ISO mit xorriso (dies kann einige Zeit dauern)..."
-(
-    cd "${ISO_DIR}"
+step_12_create_iso() {
+    log_step "12/12" "Finale ISO-Datei mit xorriso erstellen"
+    
     sudo xorriso -as mkisofs \
-        -r -V "AILINUX ${AILINUX_VERSION}" \
+        -r -V "${DISTRO_NAME} ${DISTRO_VERSION}" \
         -o "${BUILD_DIR}/${ISO_NAME}" \
         -J -l -b isolinux/isolinux.bin \
         -c isolinux/boot.cat -no-emul-boot \
         -boot-load-size 4 -boot-info-table \
         -eltorito-alt-boot \
-        -e efiboot.img -no-emul-boot \
+        -e boot/grub/efi.img -no-emul-boot \
         -isohybrid-gpt-basdat \
         -isohybrid-apm-hfsplus \
-        .
-)
-log_info "ISO-Datei erfolgreich erstellt: ${BUILD_DIR}/${ISO_NAME}"
+        "${ISO_DIR}"
 
-# --- STEP 12: Finalisieren und Ergebnisse anzeigen ---
-log_step "12/12: Finalisieren und Ergebnisse anzeigen"
-sudo chown "${ORIGINAL_USER}":"${ORIGINAL_USER}" "${BUILD_DIR}/${ISO_NAME}"
-log_info "Besitz der ISO-Datei auf ${ORIGINAL_USER} übertragen."
-
-ISO_SIZE=$(du -h "${BUILD_DIR}/${ISO_NAME}" | cut -f1)
-ISO_HASH=$(sha256sum "${BUILD_DIR}/${ISO_NAME}" | cut -d' ' -f1)
-
-echo -e "\n${COLOR_BLUE}======================================================="
-echo -e "         AILinux Build erfolgreich abgeschlossen!"
-echo -e "=======================================================${COLOR_RESET}\n"
-echo -e "${COLOR_GREEN}ISO-Datei: ${BUILD_DIR}/${ISO_NAME}${COLOR_RESET}"
-echo -e "${COLOR_GREEN}Größe:     ${ISO_SIZE}${COLOR_RESET}"
-echo -e "${COLOR_GREEN}SHA256:    ${ISO_HASH}${COLOR_RESET}\n"
-
-# --- STEP 13: Automatischer Git Commit & Push ---
-log_step "13/13: Automatischer Git Commit & Push"
-if [ -z "${GITPAT}" ]; then
-    log_warn "GITPAT nicht in .env gefunden. Überspringe automatischen Commit."
-    exit 0
-fi
-
-if [ ! -d ".git" ]; then
-    log_warn "Kein .git-Verzeichnis gefunden. Überspringe automatischen Commit."
-    exit 0
-fi
-
-# Check if there are any changes to commit
-if git diff-index --quiet HEAD --; then
-    log_info "Keine Änderungen im Git-Repository gefunden. Nichts zu tun."
-else
-    log_info "Änderungen gefunden. Erstelle Commit und pushe..."
+    log_success "ISO-Datei erfolgreich erstellt unter: ${BUILD_DIR}/${ISO_NAME}"
     
-    # Construct authenticated remote URL
-    REMOTE_HOST_PATH="${GIT_REMOTE_URL#*//}"
-    AUTH_REMOTE_URL="https://${GITPAT}@${REMOTE_HOST_PATH}"
-    
-    git config --global user.name "AILinux Build Bot"
-    git config --global user.email "buildbot@ailinux.me"
-    
-    git add .
-    COMMIT_MSG="[AILinux Build] Neue ISO erstellt am $(date +'%Y-%m-%d %H:%M:%S')"
-    git commit -m "${COMMIT_MSG}"
-    
-    log_info "Pushe Änderungen nach ${GIT_REMOTE_URL}..."
-    if git push -f "${AUTH_REMOTE_URL}" main; then
-        log_info "Push erfolgreich."
-    else
-        log_error "Git Push fehlgeschlagen."
+    # Berechtigungen zurücksetzen
+    if [ -n "${SUDO_USER}" ]; then
+        sudo chown "${SUDO_USER}":"$(id -g "${SUDO_USER}")" "${BUILD_DIR}/${ISO_NAME}"
     fi
-fi
+    
+    # Hash erstellen
+    sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
+    if [ -n "${SUDO_USER}" ]; then
+        sudo chown "${SUDO_USER}":"$(id -g "${SUDO_USER}")" "${BUILD_DIR}/${ISO_NAME}.sha256"
+    fi
+    
+    log_success "SHA256-Hash wurde erstellt."
+    echo ""
+    log_success "-------------------- BUILD ABGESCHLOSSEN --------------------"
+    echo -e "${COLOR_SUCCESS}ISO: $(realpath "${BUILD_DIR}/${ISO_NAME}")${COLOR_RESET}"
+    echo -e "${COLOR_SUCCESS}Hash: $(cat "${BUILD_DIR}/${ISO_NAME}.sha256")${COLOR_RESET}"
+}
 
-log_info "Das Build-Verzeichnis wird beim Beenden automatisch entfernt."
+# --- Skriptausführung ---
+main() {
+    check_not_root
+    
+    if [ "$1" == "--cleanup" ]; then
+        log_warn "Manuelle Bereinigung angefordert."
+        cleanup
+        exit 0
+    fi
 
-exit 0
+    step_01_setup_environment
+    step_02_debootstrap
+    step_03_mount_filesystems
+    step_04_chroot_base_config
+    step_05_chroot_kernel_core
+    step_06_chroot_desktop
+    step_07_chroot_calamares
+    step_08_chroot_user_setup
+    step_09_chroot_cleanup
+    step_10_prepare_iso_structure
+    step_11_create_bootloaders
+    step_12_create_iso
+}
+
+# Skript starten
+main "$@"
