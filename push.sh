@@ -1,46 +1,69 @@
 #!/bin/bash
+#
+# AILinux Safe Push-Skript (v2.1 - Interactive Commit)
+# Pusht den aktuellen Branch sicher zum Remote-Repository.
+# Prüft auf uncommitted Änderungen, fragt nach einer Commit-Nachricht
+# und committet sie vor dem Push.
+# Verwendet Force-Push nur, wenn es explizit mit dem --force-Flag aufgerufen wird.
 
-echo -n "🔐 Gib deinen GitHub PAT ein: "
+set -e
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD) # Aktuellen Branch automatisch erkennen
+REMOTE_URL="https://github.com/derleiti/ailinux-beta-iso.git"
+
+echo -n "🔐 Gib deinen GitHub PAT ein (wird nicht angezeigt): "
 read -s PAT
 echo
 
-BRANCH="main"
-REMOTE_URL="https://github.com/derleiti/ailinux-beta-iso.git"
-AUTH_URL="https://${PAT}@github.com/derleiti/ailinux-beta-iso.git"
+if [ -z "$PAT" ]; then
+    echo -e "\n❌ Fehler: GitHub PAT darf nicht leer sein."
+    exit 1
+fi
 
-# origin sicher neu setzen (falls gelöscht wurde)
-git remote remove origin 2>/dev/null
-git remote add origin "$REMOTE_URL"
+# Authentifizierte URL für den Push erstellen
+# Verwendet oauth2 für PAT-Authentifizierung
+AUTH_URL="https://oauth2:${PAT}@github.com/derleiti/ailinux-beta-iso.git"
 
-# Änderungen erkennen
-CHANGES=$(git status --porcelain)
-if [ -z "$CHANGES" ]; then
-  echo "📦 Keine Änderungen zum Commit gefunden."
+# Prüfen, ob ein Commit notwendig ist
+if [ -n "$(git status --porcelain)" ]; then
+    echo -e "\n📝 Änderungen zum Commit gefunden."
+    git status -s # Zeigt eine kurze Zusammenfassung der Änderungen
+    echo
+    read -p "Gib eine Commit-Nachricht ein (Standard: 'Update'): " COMMIT_MSG
+
+    # Fallback auf Standard-Commit-Text
+    if [ -z "$COMMIT_MSG" ]; then
+        COMMIT_MSG="Update"
+    fi
+
+    # Änderungen vorbereiten und committen
+    echo -e "\n✨ Committe Änderungen..."
+    git add .
+    git commit -m "$COMMIT_MSG"
+    echo "✅ Änderungen committed: $COMMIT_MSG"
 else
-  echo
-  echo "📝 Gib einen Commit-Text ein (Standard: 'Update'): "
-  read COMMIT_MSG
+    echo -e "\n📦 Keine neuen Änderungen zum Commit gefunden."
+fi
 
-  # Fallback auf Standard-Commit-Text
-  if [ -z "$COMMIT_MSG" ]; then
-    COMMIT_MSG="Update"
-  fi
-
-  # Änderungen vorbereiten
-  git add .
-  git commit -m "$COMMIT_MSG"
-  echo "✅ Änderungen committed: $COMMIT_MSG"
+# Prüfen auf --force Flag für den einmaligen Fix nach dem History-Cleanup
+FORCE_FLAG=""
+if [ "$1" == "--force" ]; then
+    FORCE_FLAG="--force"
+    echo -e "\n🟠 WARNUNG: Force-Push wird ausgeführt! Dies sollte nur nach dem Bereinigen der Git-Historie notwendig sein."
 fi
 
 echo
-echo "📤 Pushe Branch '$BRANCH' mit Force auf:"
+echo "📤 Pushe Branch '$BRANCH' auf Remote..."
 echo "➡  $REMOTE_URL"
 
 # Push ausführen
-git push -f "$AUTH_URL" "$BRANCH"
+git push $FORCE_FLAG "$AUTH_URL" "$BRANCH"
 
 if [ $? -eq 0 ]; then
-  echo "✅ Push erfolgreich!"
+    echo -e "\n✅ Push erfolgreich!"
 else
-  echo "❌ Push fehlgeschlagen!"
+    echo -e "\n❌ Push fehlgeschlagen!"
+    echo "Mögliche Gründe:"
+    echo "  - Dein lokaler Branch ist nicht aktuell. Führe 'git pull' aus."
+    echo "  - Der PAT ist ungültig oder hat nicht die nötigen Berechtigungen."
 fi
