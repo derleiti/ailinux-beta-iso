@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.5 - Final ISOhybrid Fix)
+# AILinux ISO Build-Skript (v17.6 - Fixed EFI Image Creation)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # und den Spezifikationen in prompt.txt.
 #
@@ -469,6 +469,24 @@ EOF
     mkdir -p "${ISO_DIR}/EFI/BOOT"
     cp "${ISO_DIR}/boot/grub/bootx64.efi" "${ISO_DIR}/EFI/BOOT/"
     cp /usr/lib/shim/shimx64.efi.signed "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
+
+    # WICHTIG: Erstelle das EFI-Image, das xorriso benötigt
+    log_info "Erstelle EFI-Boot-Image..."
+    
+    # Berechne die Größe für das EFI-Image (in KB, mindestens 4MB)
+    EFI_SIZE=$(($(du -s "${ISO_DIR}/EFI" | cut -f1) + 1024))
+    EFI_SIZE=$((EFI_SIZE < 4096 ? 4096 : EFI_SIZE))
+    
+    # Erstelle ein FAT32-Dateisystem für EFI
+    dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1k count=${EFI_SIZE} status=none
+    mkfs.vfat "${ISO_DIR}/boot/grub/efi.img" >/dev/null
+    
+    # Mounte das Image und kopiere die EFI-Dateien
+    EFI_MOUNT=$(mktemp -d)
+    sudo mount -o loop "${ISO_DIR}/boot/grub/efi.img" "${EFI_MOUNT}"
+    sudo cp -r "${ISO_DIR}/EFI" "${EFI_MOUNT}/"
+    sudo umount "${EFI_MOUNT}"
+    rmdir "${EFI_MOUNT}"
 
     log_success "Bootloader-Konfigurationen erstellt."
 }
