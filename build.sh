@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.6
+# AILinux ISO Build Script v16.7
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It includes fixes for the repository
-# port number and the installation of the 'tzdata' package.
+# based on Ubuntu 24.04 (noble). It now includes the 'gnupg' package
+# to ensure GPG keys can be imported by external scripts.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -240,12 +240,11 @@ EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-# FIX: Added tzdata to the installation list
-apt-get install -y --no-install-recommends locales curl ca-certificates tzdata
+# FIX: Added gnupg for GPG key import
+apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg
 
 # Add AILinux repository
 echo "Füge AILinux Repository hinzu..."
-# FIX: Corrected port from 84443 to 8443
 curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
 echo "Repository hinzugefügt. Aktualisiere Paketlisten erneut..."
 
