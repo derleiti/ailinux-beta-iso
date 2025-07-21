@@ -195,12 +195,19 @@ step_02_bootstrap_system() {
     log_step "2/10" "Bootstrap Base System and Configure Repositories"
     
     log_info "Running debootstrap to create base system..."
-    # KORREKTUR: "--variant=standard" wurde durch "--variant=minbase" ersetzt.
-    # "standard" ist keine gültige debootstrap-Variante. "minbase" erstellt
-    # ein minimales Basissystem, das die korrekte Grundlage für eine
-    # benutzerdefinierte Distribution ist.
     sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     
+    log_info "Configuring full APT sources for the new system..."
+    # KORREKTUR: Eine vollständige sources.list wird erstellt, um sicherzustellen,
+    # dass alle notwendigen Komponenten (main, restricted, universe, multiverse)
+    # von Anfang an verfügbar sind. Dies behebt den Fehler "Package 'dialog' has no installation candidate".
+    sudo tee "${CHROOT_DIR}/etc/apt/sources.list" > /dev/null <<'EOF'
+deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+EOF
+
     # Setup mounts for chroot
     sudo mount --bind /dev "${CHROOT_DIR}/dev"
     sudo mount --bind /dev/pts "${CHROOT_DIR}/dev/pts"
