@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v16.0)
+# AILinux ISO Build-Skript (v16.1)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat).
 #
 # Lizenz: MIT License
@@ -75,14 +75,14 @@ check_not_root() {
 # Sichere Unmount-Funktion, versucht mehrfach.
 safe_umount() {
     local mount_point="$1"
-    if ! findmnt -rno TARGET "$mount_point" > /dev/null; then
+    if ! findmnt -rno TARGET "$mount_point" &> /dev/null; then
         log_info "Mountpunkt '$mount_point' ist bereits unmounted."
         return 0
     fi
     log_info "Unmounte '$mount_point'..."
     local attempts=5
     while [ $attempts -gt 0 ]; do
-        if sudo umount -l "$mount_point"; then
+        if sudo umount -l "$mount_point" 2>/dev/null; then
             log_success "Unmount von '$mount_point' erfolgreich."
             return 0
         fi
@@ -122,11 +122,18 @@ step_01_setup_environment() {
     log_step "1/12" "Umgebung einrichten und Abhängigkeiten prüfen"
     
     # Notwendige Pakete auf dem Host-System prüfen und ggf. installieren
-    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common")
+    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "ovmf" "psmisc" "lsof")
     local missing_deps=()
     log_info "Prüfe Abhängigkeiten..."
-    for dep in "${dependencies[@]}"; do
+    
+    for dep in debootstrap squashfs-tools xorriso mtools dosfstools psmisc lsof; do
         if ! command -v "$dep" &> /dev/null; then
+            missing_deps+=("$dep")
+        fi
+    done
+    
+    for dep in grub-pc-bin grub-efi-amd64-bin isolinux syslinux-common shim-signed ovmf; do
+        if ! dpkg -l | grep -q "^ii  $dep "; then
             missing_deps+=("$dep")
         fi
     done
@@ -192,6 +199,11 @@ SOURCES
         # APT aktualisieren
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
+        
+        # Locales konfigurieren
+        apt-get install -y locales
+        locale-gen en_US.UTF-8
+        update-locale LANG=en_US.UTF-8
 EOF
     log_success "Basiskonfiguration im Chroot abgeschlossen."
 }
@@ -203,6 +215,7 @@ step_05_chroot_kernel_core() {
         export DEBIAN_FRONTEND=noninteractive
         apt-get install -y --no-install-recommends \
             linux-image-generic \
+            linux-headers-generic \
             casper \
             lupin-casper \
             discover \
@@ -210,9 +223,14 @@ step_05_chroot_kernel_core() {
             plymouth \
             plymouth-theme-ubuntu-logo \
             ubuntu-standard \
-            locales \
             keyboard-configuration \
-            console-setup
+            console-setup \
+            sudo \
+            curl \
+            wget \
+            apt-transport-https \
+            ca-certificates \
+            software-properties-common
 EOF
     log_success "Kernel und Core-System installiert."
 }
@@ -223,14 +241,25 @@ step_06_chroot_desktop() {
         set -e
         export DEBIAN_FRONTEND=noninteractive
         apt-get install -y --no-install-recommends \
-            kde-standard \
+            kde-plasma-desktop \
             sddm \
             konsole \
             firefox \
             vlc \
             libreoffice-calc \
             libreoffice-writer \
-            libreoffice-impress
+            libreoffice-impress \
+            file-manager \
+            ark \
+            kate \
+            okular \
+            spectacle \
+            systemsettings \
+            plasma-discover \
+            plasma-nm \
+            plasma-pa \
+            kde-config-gtk-style \
+            breeze-gtk-theme
 EOF
     log_success "KDE Desktop und Anwendungen installiert."
 }
@@ -241,31 +270,65 @@ step_07_chroot_calamares() {
         set -e
         export DEBIAN_FRONTEND=noninteractive
         
-        # Calamares, Ubuntu-Module und imagemagick (für Logos) installieren
+        # Calamares und notwendige Abhängigkeiten installieren
         apt-get install -y calamares calamares-settings-ubuntu imagemagick
         
-        # Branding für AILinux setzen
-        # Hinweis: Die genauen Keys können sich ändern. Dies ist ein Beispiel.
-        sed -i 's/^branding:.*/branding: ailinux/' /etc/calamares/settings.conf
-        
-        # Ein eigenes Branding-Modul wäre der nächste Schritt
-        # Hier eine einfache Anpassung des Produktnamens
+        # Branding-Verzeichnis erstellen
         mkdir -p /etc/calamares/branding/ailinux
+        
+        # Branding-Descriptor erstellen
         cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
-[Branding]
-componentName: ailinux
-productName: AILinux 24.04
-shortProductName: AILinux
-productUrl: https://github.com/derleiti/ailinux-beta-iso
-supportUrl: https://github.com/derleiti/ailinux-beta-iso/issues
-productLogo: "/usr/share/calamares/branding/ailinux/logo.png"
-productIcon: "/usr/share/calamares/branding/ailinux/icon.png"
+---
+componentName:  ailinux
+strings:
+    productName:         "AILinux 24.04"
+    shortProductName:    "AILinux"
+    version:             "24.04"
+    shortVersion:        "24.04"
+    versionedName:       "AILinux 24.04"
+    shortVersionedName:  "AILinux 24.04"
+    bootloaderEntryName: "AILinux"
+    productUrl:          "https://github.com/derleiti/ailinux-beta-iso"
+    supportUrl:          "https://github.com/derleiti/ailinux-beta-iso/issues"
+    bugReportUrl:        "https://github.com/derleiti/ailinux-beta-iso/issues"
+    donateUrl:           "https://github.com/derleiti/ailinux-beta-iso"
+images:
+    productLogo:         "logo.png"
+    productIcon:         "logo.png"
+style:
+    sidebarBackground:   "#1d99f3"
+    sidebarText:         "#ffffff"
+    sidebarTextSelect:   "#4d4d4d"
+slideshow:              "show.qml"
+slideshowAPI: 1
 BRANDING
         
-        # Platzhalter-Bilder erstellen (ersetzen Sie diese durch Ihre eigenen)
-        mkdir -p /usr/share/calamares/branding/ailinux/
-        convert -size 220x100 xc:gray +antialias -font "DejaVu-Sans-Bold" -pointsize 30 -draw "gravity center text 0,0 'AILinux'" /usr/share/calamares/branding/ailinux/logo.png
-        convert -size 32x32 xc:gray +antialias -font "DejaVu-Sans-Bold" -pointsize 10 -draw "gravity center text 0,0 'AI'" /usr/share/calamares/branding/ailinux/icon.png
+        # Einfaches Logo erstellen
+        convert -size 220x100 xc:'#1d99f3' +antialias \
+            -font "DejaVu-Sans-Bold" -pointsize 30 -fill white \
+            -draw "gravity center text 0,0 'AILinux'" \
+            /etc/calamares/branding/ailinux/logo.png
+            
+        # Slideshow erstellen
+        cat > /etc/calamares/branding/ailinux/show.qml << "SLIDESHOW"
+import QtQuick 2.0;
+Rectangle {
+    width: 800; height: 600
+    color: "#1d99f3"
+    Text {
+        anchors.centerIn: parent
+        text: "Welcome to AILinux 24.04"
+        font.pointSize: 32
+        color: "white"
+    }
+}
+SLIDESHOW
+        
+        # Calamares-Konfiguration anpassen
+        sed -i 's/^branding:.*/branding: ailinux/' /etc/calamares/settings.conf
+        
+        # Sicherstellen, dass der Installer verfügbar ist
+        apt-get install -y gparted
 EOF
     log_success "Calamares Installer konfiguriert."
 }
@@ -278,29 +341,43 @@ step_08_chroot_user_setup() {
         useradd -s /bin/bash -d "/home/${LIVE_USER}" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,sambashare "${LIVE_USER}"
         # Passwort deaktivieren (leeres Passwort)
         passwd -d "${LIVE_USER}"
+        
+        # Sudoers-Eintrag für passwordless sudo
+        echo "${LIVE_USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
         # SDDM Autologin konfigurieren
         mkdir -p /etc/sddm.conf.d
         cat > /etc/sddm.conf.d/autologin.conf << AUTOLOGIN_CONF
 [Autologin]
 User=${LIVE_USER}
-Session=plasma-x11.desktop
+Session=plasma
 AUTOLOGIN_CONF
 
-        # Calamares Desktop-Launcher erstellen
+        # Desktop-Verzeichnis erstellen
         mkdir -p "/home/${LIVE_USER}/Desktop"
+        
+        # Calamares Desktop-Launcher erstellen
         cat > "/home/${LIVE_USER}/Desktop/Install AILinux.desktop" << DESKTOP_FILE
 [Desktop Entry]
 Name=Install AILinux
 Comment=Install AILinux to your hard drive
-Exec=sudo calamares
+Exec=pkexec calamares
 Icon=calamares
 Terminal=false
 Type=Application
 Categories=System;
+StartupNotify=true
 DESKTOP_FILE
         
         chmod +x "/home/${LIVE_USER}/Desktop/Install AILinux.desktop"
+        
+        # Standard-Desktop-Dateien verlinken
+        for app in firefox konsole kate; do
+            if [ -f "/usr/share/applications/${app}.desktop" ]; then
+                ln -sf "/usr/share/applications/${app}.desktop" "/home/${LIVE_USER}/Desktop/"
+            fi
+        done
+        
         chown -R "${LIVE_USER}":"${LIVE_USER}" "/home/${LIVE_USER}"
 EOF
     log_success "Live-Benutzer und Autologin eingerichtet."
@@ -312,18 +389,27 @@ step_09_chroot_cleanup() {
         set -e
         # APT-Cache leeren
         apt-get autoremove -y
+        apt-get autoclean
         apt-get clean
         
         # Temporäre Dateien und Logs leeren
         rm -rf /tmp/*
+        rm -rf /var/tmp/*
         find /var/log -type f -exec truncate --size 0 {} \;
         
         # resolv.conf entfernen
-        rm /etc/resolv.conf
+        rm -f /etc/resolv.conf
         
         # machine-id zurücksetzen für Live-System
-        rm /etc/machine-id
-        ln -s /var/lib/dbus/machine-id /etc/machine-id
+        rm -f /etc/machine-id
+        rm -f /var/lib/dbus/machine-id
+        touch /etc/machine-id
+        
+        # SSH Host Keys entfernen
+        rm -f /etc/ssh/ssh_host_*
+        
+        # Apt-Listen bereinigen
+        rm -rf /var/lib/apt/lists/*
 EOF
     log_success "Chroot-System bereinigt."
 }
@@ -339,24 +425,37 @@ step_10_prepare_iso_structure() {
     safe_umount "${CHROOT_DIR}/run"
     
     # ISO-Verzeichnisstruktur
-    mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub}
+    mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub,.disk,preseed}
     
     # Kernel und Initrd kopieren
-    cp "${CHROOT_DIR}/boot/vmlinuz"*-generic "${ISO_DIR}/casper/vmlinuz"
-    cp "${CHROOT_DIR}/boot/initrd.img"*-generic "${ISO_DIR}/casper/initrd"
+    cp "${CHROOT_DIR}"/boot/vmlinuz-*-generic "${ISO_DIR}/casper/vmlinuz"
+    cp "${CHROOT_DIR}"/boot/initrd.img-*-generic "${ISO_DIR}/casper/initrd"
     
     # Manifest erstellen
     sudo chroot "${CHROOT_DIR}" dpkg-query -W --showformat='${Package}\t${Version}\n' > "${ISO_DIR}/casper/filesystem.manifest"
+    cp "${ISO_DIR}/casper/filesystem.manifest" "${ISO_DIR}/casper/filesystem.manifest-desktop"
     
     # SquashFS erstellen
     log_info "Erstelle SquashFS-Abbild (dies kann einige Zeit dauern)..."
-    sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend -e boot
+    sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" \
+        -noappend -e boot -comp xz -Xbcj x86 -b 1048576
     
     # Dateigröße für den Installer
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
     
-    # Release-Notes
-    echo "${DISTRO_NAME} ${DISTRO_VERSION} (${UBUNTU_CODENAME}) - Built on $(date)" > "${ISO_DIR}/README.diskdefines"
+    # Disk-Info erstellen
+    cat > "${ISO_DIR}/.disk/info" << EOF
+${DISTRO_NAME} ${DISTRO_VERSION} "${UBUNTU_CODENAME}" - Release ${ARCHITECTURE} ($(date +%Y%m%d))
+EOF
+    
+    # Ubuntu-Preseed-Datei erstellen
+    cat > "${ISO_DIR}/preseed/ubuntu.seed" << 'PRESEED'
+d-i debian-installer/language string en
+d-i debian-installer/country string US
+d-i debian-installer/locale string en_US.UTF-8
+d-i console-setup/ask_detect boolean false
+d-i keyboard-configuration/layoutcode string us
+PRESEED
     
     log_success "ISO-Struktur und SquashFS erfolgreich erstellt."
 }
@@ -364,50 +463,101 @@ step_10_prepare_iso_structure() {
 step_11_create_bootloaders() {
     log_step "11/12" "Bootloader (ISOLINUX für BIOS, GRUB für UEFI) erstellen"
     
-    # ISOLINUX (BIOS)
+    # ISOLINUX (BIOS) Setup
     cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
-    cp /usr/lib/syslinux/modules/bios/*.c32 "${ISO_DIR}/isolinux/"
+    cp /usr/lib/syslinux/modules/bios/{menu.c32,chain.c32,ldlinux.c32,libcom32.c32,libutil.c32} "${ISO_DIR}/isolinux/"
+    
     cat > "${ISO_DIR}/isolinux/isolinux.cfg" << EOF
-UI vesamenu.c32
-MENU TITLE AILinux Boot Menu
-DEFAULT live
+DEFAULT vesamenu.c32
+TIMEOUT 300
+MENU TITLE ${DISTRO_NAME} ${DISTRO_VERSION} Boot Menu
+MENU BACKGROUND splash.png
+
 LABEL live
-  MENU LABEL Try or Install AILinux
+  MENU LABEL ^Try or Install ${DISTRO_NAME}
+  MENU DEFAULT
   KERNEL /casper/vmlinuz
   APPEND file=/cdrom/preseed/ubuntu.seed boot=casper initrd=/casper/initrd quiet splash ---
+
+LABEL live-install
+  MENU LABEL ^Install ${DISTRO_NAME}
+  KERNEL /casper/vmlinuz
+  APPEND file=/cdrom/preseed/ubuntu.seed boot=casper only-ubiquity initrd=/casper/initrd quiet splash ---
+
 LABEL check
-  MENU LABEL Check disc for defects
+  MENU LABEL ^Check disc for defects
   KERNEL /casper/vmlinuz
   APPEND boot=casper integrity-check initrd=/casper/initrd quiet splash ---
-LABEL memtest
-  MENU LABEL Test memory
-  KERNEL /isolinux/memtest
+
 LABEL hd
-  MENU LABEL Boot from first hard disk
+  MENU LABEL Boot from ^first hard disk
   LOCALBOOT 0x80
 EOF
 
-    # GRUB (UEFI)
+    # EFI Boot Setup
+    mkdir -p "${ISO_DIR}/boot/grub"
+    
+    # GRUB EFI Konfiguration
     cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOF
-search --no-floppy --set=root --file /README.diskdefines
-
-set timeout=10
+set timeout=30
 set default="0"
 
-menuentry "Try or Install AILinux" {
-    linux /casper/vmlinuz boot=casper file=/cdrom/preseed/ubuntu.seed quiet splash ---
+if loadfont /boot/grub/font.pf2 ; then
+	set gfxmode=auto
+	insmod efi_gop
+	insmod efi_uga
+	insmod gfxterm
+	terminal_output gfxterm
+fi
+
+set menu_color_normal=white/black
+set menu_color_highlight=black/light-gray
+
+menuentry "Try or Install ${DISTRO_NAME}" {
+    set gfxpayload=keep
+    linux /casper/vmlinuz file=/cdrom/preseed/ubuntu.seed boot=casper quiet splash ---
+    initrd /casper/initrd
+}
+
+menuentry "Install ${DISTRO_NAME}" {
+    set gfxpayload=keep
+    linux /casper/vmlinuz file=/cdrom/preseed/ubuntu.seed boot=casper only-ubiquity quiet splash ---
     initrd /casper/initrd
 }
 
 menuentry "Check disc for defects" {
+    set gfxpayload=keep
     linux /casper/vmlinuz boot=casper integrity-check quiet splash ---
     initrd /casper/initrd
 }
 
-menuentry "UEFI Firmware Settings" {
+if [ \${grub_platform} = "efi" ]; then
+menuentry 'Boot from next volume' {
+	exit 1
+}
+menuentry 'UEFI Firmware Settings' {
 	fwsetup
 }
+fi
 EOF
+
+    # EFI Image erstellen
+    log_info "Erstelle EFI Boot-Image..."
+    dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1M count=10
+    sudo mkfs.fat -F12 -n 'EFI_BOOT' "${ISO_DIR}/boot/grub/efi.img"
+    
+    # EFI Mount und Setup
+    mkdir -p /tmp/efi_mount
+    sudo mount "${ISO_DIR}/boot/grub/efi.img" /tmp/efi_mount
+    sudo mkdir -p /tmp/efi_mount/EFI/BOOT
+    sudo cp /usr/lib/shim/shimx64.efi.signed /tmp/efi_mount/EFI/BOOT/BOOTX64.EFI
+    sudo cp /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed /tmp/efi_mount/EFI/BOOT/grubx64.efi
+    
+    # GRUB Konfiguration für EFI
+    sudo mkdir -p /tmp/efi_mount/boot/grub
+    sudo cp "${ISO_DIR}/boot/grub/grub.cfg" /tmp/efi_mount/boot/grub/
+    sudo umount /tmp/efi_mount
+    rmdir /tmp/efi_mount
     
     log_success "Bootloader-Konfigurationen erstellt."
 }
@@ -415,14 +565,21 @@ EOF
 step_12_create_iso() {
     log_step "12/12" "Finale ISO-Datei mit xorriso erstellen"
     
+    # Volume-ID setzen
+    local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
+    
     sudo xorriso -as mkisofs \
-        -r -V "${DISTRO_NAME} ${DISTRO_VERSION}" \
+        -r -V "${volume_id}" \
         -o "${BUILD_DIR}/${ISO_NAME}" \
-        -J -l -b isolinux/isolinux.bin \
-        -c isolinux/boot.cat -no-emul-boot \
-        -boot-load-size 4 -boot-info-table \
+        -J -joliet-long -l \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
         -eltorito-alt-boot \
-        -e boot/grub/efi.img -no-emul-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
         -isohybrid-gpt-basdat \
         -isohybrid-apm-hfsplus \
         "${ISO_DIR}"
@@ -434,7 +591,8 @@ step_12_create_iso() {
         sudo chown "${SUDO_USER}":"$(id -g "${SUDO_USER}")" "${BUILD_DIR}/${ISO_NAME}"
     fi
     
-    # Hash erstellen
+    # Hash und Größe berechnen
+    local iso_size=$(du -h "${BUILD_DIR}/${ISO_NAME}" | cut -f1)
     sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
     if [ -n "${SUDO_USER}" ]; then
         sudo chown "${SUDO_USER}":"$(id -g "${SUDO_USER}")" "${BUILD_DIR}/${ISO_NAME}.sha256"
@@ -442,9 +600,15 @@ step_12_create_iso() {
     
     log_success "SHA256-Hash wurde erstellt."
     echo ""
-    log_success "-------------------- BUILD ABGESCHLOSSEN --------------------"
-    echo -e "${COLOR_SUCCESS}ISO: $(realpath "${BUILD_DIR}/${ISO_NAME}")${COLOR_RESET}"
-    echo -e "${COLOR_SUCCESS}Hash: $(cat "${BUILD_DIR}/${ISO_NAME}.sha256")${COLOR_RESET}"
+    log_success "==================== BUILD ERFOLGREICH ABGESCHLOSSEN ===================="
+    echo -e "${COLOR_SUCCESS}ISO-Datei: $(realpath "${BUILD_DIR}/${ISO_NAME}")${COLOR_RESET}"
+    echo -e "${COLOR_SUCCESS}Größe: ${iso_size}${COLOR_RESET}"
+    echo -e "${COLOR_SUCCESS}SHA256: $(cat "${BUILD_DIR}/${ISO_NAME}.sha256" | cut -d' ' -f1)${COLOR_RESET}"
+    echo ""
+    echo -e "${COLOR_INFO}Um die ISO zu testen:${COLOR_RESET}"
+    echo -e "  ${COLOR_INFO}• VirtualBox/VMware: ISO als CD/DVD einlegen${COLOR_RESET}"
+    echo -e "  ${COLOR_INFO}• USB-Stick: dd if=${BUILD_DIR}/${ISO_NAME} of=/dev/sdX bs=4M status=progress${COLOR_RESET}"
+    echo -e "  ${COLOR_INFO}• QEMU: qemu-system-x86_64 -m 2048 -boot d -cdrom ${BUILD_DIR}/${ISO_NAME}${COLOR_RESET}"
 }
 
 # --- Skriptausführung ---
@@ -456,6 +620,11 @@ main() {
         cleanup
         exit 0
     fi
+
+    echo -e "${COLOR_STEP}===============================================${COLOR_RESET}"
+    echo -e "${COLOR_STEP}  AILinux ISO Build Script v16.1 gestartet  ${COLOR_RESET}"
+    echo -e "${COLOR_STEP}===============================================${COLOR_RESET}"
+    echo ""
 
     step_01_setup_environment
     step_02_debootstrap
@@ -469,6 +638,8 @@ main() {
     step_10_prepare_iso_structure
     step_11_create_bootloaders
     step_12_create_iso
+    
+    cleanup
 }
 
 # Skript starten
