@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v16.5 - Final mit ISO-Verschiebung)
+# AILinux ISO Build-Skript (v16.6 - Final mit Calamares & KDE Fix)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat).
 #
 # Lizenz: MIT License
@@ -16,7 +16,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
@@ -219,8 +219,9 @@ step_06_chroot_desktop() {
         
         log_info() { echo "[CHROOT-INFO] $1"; }
         
-        log_info "Installiere KDE Plasma Desktop..."
-        apt-get install -y --no-install-recommends \
+        log_info "Installiere KDE Plasma Desktop (vollständig)..."
+        # KORREKTUR: --no-install-recommends entfernt für eine vollständige Installation
+        apt-get install -y \
             kde-full plasma-desktop sddm-theme-breeze xorg
         
         log_info "Installiere Standard-Anwendungen..."
@@ -264,28 +265,39 @@ EOF
 }
 
 step_07_chroot_calamares() {
-    log_step "7/12" "Chroot: Calamares Installer einrichten"
+    log_step "7/12" "Chroot: Calamares Installer vollständig einrichten"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
         export LANG=en_US.UTF-8
-        export LC_ALL=en_US.UTF-8
         
         apt-get install -y calamares imagemagick
         
-        mkdir -p /etc/calamares/branding/ailinux
+        # --- KORREKTUR: Vollständige Calamares-Konfiguration erstellen ---
         
-        if [ ! -f /etc/calamares/settings.conf ]; then
-            echo "settings.conf nicht gefunden. Erstelle sie aus der Vorlage."
-            if [ -f /usr/share/calamares/settings.conf ]; then
-                cp /usr/share/calamares/settings.conf /etc/calamares/settings.conf
-            else
-                cat > /etc/calamares/settings.conf << "SETTINGS_FALLBACK"
+        # 1. settings.conf mit korrekter Sequenz
+        mkdir -p /etc/calamares
+        cat > /etc/calamares/settings.conf << "SETTINGS"
 modules-search: [ local, /usr/share/calamares/modules ]
-SETTINGS_FALLBACK
-            fi
-        fi
+branding: ailinux
+sequence:
+  - show:
+      - welcome
+      - partition
+      - users
+      - summary
+  - exec:
+      - partition
+      - mount
+      - unpackfs
+      - users
+      - bootloader
+      - postinstall
+      - umount
+SETTINGS
 
+        # 2. Branding-Konfiguration
+        mkdir -p /etc/calamares/branding/ailinux
         cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
 ---
 componentName:  ailinux
@@ -294,18 +306,42 @@ strings:
     bootloaderEntryName: "AILinux"
 images:
     productLogo:        "logo.png"
-style:
-    sidebarBackground:  "#1d99f3"
-    sidebarText:        "#ffffff"
 BRANDING
-        
         convert -size 240x120 xc:'#1d99f3' -font "DejaVu-Sans-Bold" -pointsize 26 -fill white \
                 -gravity center -draw "text 0,0 'AILinux'" \
                 /etc/calamares/branding/ailinux/logo.png
-        
-        sed -i 's/^branding:.*/branding: ailinux/' /etc/calamares/settings.conf
+
+        # 3. Wichtige Modul-Konfigurationen erstellen
+        mkdir -p /etc/calamares/modules
+
+        cat > /etc/calamares/modules/unpackfs.conf << "UNPACKFS"
+unpack:
+  - source: "/run/live/medium/casper/filesystem.squashfs"
+    sourcefs: "squashfs"
+    destination: ""
+UNPACKFS
+
+        cat > /etc/calamares/modules/users.conf << "USERS"
+default_groups:
+  - "adm"
+  - "cdrom"
+  - "sudo"
+  - "dip"
+  - "plugdev"
+  - "lpadmin"
+  - "audio"
+  - "video"
+USERS
+
+        cat > /etc/calamares/modules/bootloader.conf << "BOOTLOADER"
+installBootloader: true
+bootloader: "grub"
+grubInstall: "efi"
+efiBootloaderId: "AILinux"
+BOOTLOADER
+
 EOF
-    log_success "Calamares Installer konfiguriert."
+    log_success "Calamares Installer vollständig konfiguriert."
 }
 
 step_08_chroot_user_setup() {
@@ -326,9 +362,13 @@ Relogin=false
 AUTOLOGIN_CONF
 
         mkdir -p "/home/${LIVE_USER}/Desktop"
+        # KORREKTUR: Deutsche Übersetzung hinzugefügt
         cat > "/home/${LIVE_USER}/Desktop/Install AILinux.desktop" << DESKTOP_FILE
 [Desktop Entry]
 Name=Install AILinux
+Name[de]=AILinux installieren
+Comment=Install AILinux to your hard drive
+Comment[de]=AILinux auf die Festplatte installieren
 Exec=pkexec calamares
 Icon=calamares
 Terminal=false
@@ -456,7 +496,7 @@ main() {
     
     if [ "$1" == "--cleanup" ]; then
         log_warn "Manuelle Bereinigung angefordert."
-        cleanup
+        ./cleanup.sh # Ruft das externe Skript auf, falls vorhanden
         exit 0
     fi
     
@@ -476,7 +516,6 @@ main() {
     current_step="11: Bootloaders" && step_11_create_bootloaders
     current_step="12: Create ISO" && step_12_create_iso
     
-    # --- KORREKTUR: ISO und SHA256 vor dem Aufräumen verschieben ---
     log_info "Verschiebe fertige ISO und SHA256 in das Projektverzeichnis..."
     mv "${BUILD_DIR}/${ISO_NAME}" .
     mv "${BUILD_DIR}/${ISO_NAME}.sha256" .
