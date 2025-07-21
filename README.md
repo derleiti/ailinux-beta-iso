@@ -1,3 +1,89 @@
+# AILinux Beta
+
+![AILinux](https://img.shields.io/badge/AILinux-24.04%20Premium-blue.svg)
+!([https://img.shields.io/badge/Status-Beta-orange.svg](https://img.shields.io/badge/Status-Beta-orange.svg))
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+
+AILinux ist ein experimentelles, bootfähiges Linux-Betriebssystem, das eine tief integrierte, KI-gestützte Systemassistenz direkt auf den Desktop bringt. Dieses Projekt zielt darauf ab, die Lücke zwischen dem Betriebssystem und künstlicher Intelligenz zu schließen und eine Umgebung zu schaffen, in der die KI ein aktiver Partner bei der Systemverwaltung und Fehlerbehebung ist.
+
+**Dieses Projekt befindet sich in einer frühen Beta-Phase. Es ist für Entwickler, Tester und Enthusiasten gedacht. Rechnen Sie mit Fehlern und Instabilität. Nicht für den produktiven Einsatz empfohlen.**
+
+---
+
+## 核心功能 (Core Features)
+
+*   **Vollständiges Betriebssystem (ISO):** AILinux wird als bootfähige `.iso`-Datei vertrieben. Sie können es in einer Live-Sitzung ausprobieren oder es mithilfe des Calamares-Installers auf Ihrer Festplatte installieren.
+*   **Integrierter KI-Assistent:** Der Kern von AILinux ist der `aihelp`-Befehl, ein Konversations-KI-Agent, der darauf trainiert ist, bei Linux-Systemproblemen zu helfen.
+*   **Cloud-gestützte Intelligenz:** Um modernste Leistung zu gewährleisten, nutzt der Assistent eine externe, Cloud-basierte Large Language Model (LLM) API.
+*   **Premium Desktop-Erlebnis:** Basiert auf Ubuntu 24.04 LTS mit einem vorkonfigurierten KDE Plasma Desktop und einer umfassenden Suite von vorinstallierten Anwendungen (Chrome, VS Code, LibreOffice, GIMP, Wine etc.).
+*   **Anpassbare KI-Persönlichkeit:** Das Verhalten und die Rolle der KI werden durch eine lokale `prompt.txt`-Datei definiert, die eine konsistente und fokussierte Interaktion gewährleistet.
+
+## ⚙️ Konfiguration: Der API-Schlüssel
+
+Da AILinux eine externe KI-API verwendet, **müssen Sie Ihren eigenen API-Schlüssel angeben**, damit der `aihelp`-Assistent funktioniert.
+
+1.  **Erstellen Sie eine `.env`-Datei:** Kopieren Sie die Vorlage `.env.example` in eine neue Datei mit dem Namen `.env`:bash
+    cp.env.example.env
+    ```
+2.  **Fügen Sie Ihren Schlüssel hinzu:** Öffnen Sie die `.env`-Datei mit einem Texteditor und fügen Sie Ihren API-Schlüssel ein. Die Datei sollte so aussehen:
+    ```
+    #.env - API-Schlüssel für den Zugriff auf die KI
+    MISTRALAPIKEY=ihr_persoenlicher_api_schluessel_hier
+    ```
+
+**Ihre Anfragen werden zur Verarbeitung an den externen API-Anbieter gesendet. Seien Sie sich der Datenschutzimplikationen bewusst.**
+
+## 🚀 Erste Schritte
+
+1.  **ISO herunterladen:** Laden Sie die neueste `.iso`-Datei aus dem(https://github.com/derleiti/ailinux-beta-iso/releases) dieses Repositorys herunter.
+2.  **Bootfähigen USB-Stick erstellen:** Verwenden Sie ein Tool wie(https://www.balena.io/etcher/) oder `dd`, um die `.iso`-Datei auf einen USB-Stick zu schreiben.
+3.  **Live-System booten:** Starten Sie Ihren Computer vom USB-Stick, um AILinux im Live-Modus auszuprobieren.
+4.  **(Optional) Installieren:** Verwenden Sie das "AILinux installieren"-Symbol auf dem Desktop, um den Calamares-Installer zu starten und AILinux dauerhaft auf Ihrer Festplatte zu installieren.
+
+## 🤖 Verwendung des `aihelp`-Assistenten
+
+Öffnen Sie ein Terminal (`konsole`) und verwenden Sie den `aihelp`-Befehl, um Unterstützung zu erhalten.
+
+**Beispiel 1: Analyse einer Fehlermeldung**
+```bash
+aihelp "Mein apt update schlägt mit dem Fehler 'E: Could not get lock /var/lib/dpkg/lock-frontend' fehl."
+```
+
+**Beispiel 2: Analyse einer Log-Datei**
+```bash
+aihelp --log /var/log/syslog
+```
+
+**Beispiel 3: Interaktive Sitzung**
+Führen Sie einfach `aihelp` ohne Argumente aus, um eine interaktive Sitzung zu starten. Fügen Sie Ihre Frage ein und drücken Sie `Ctrl+D`, wenn Sie fertig sind.
+
+## 🛠️ Aus dem Quellcode erstellen
+
+Für fortgeschrittene Benutzer, die die ISO selbst erstellen möchten:
+
+1.  **Repository klonen:**
+    ```bash
+    git clone [https://github.com/derleiti/ailinux-beta-iso.git](https://github.com/derleiti/ailinux-beta-iso.git)
+    cd ailinux-beta-iso
+    ```
+2.  **Abhängigkeiten installieren:**
+    Stellen Sie sicher, dass alle für den Build erforderlichen Pakete installiert sind (z.B. `debootstrap`, `squashfs-tools`, `xorriso`, `git`).
+    ```bash
+    sudo apt-get install debootstrap squashfs-tools xorriso git curl...
+    ```
+3.  **(Optional) API-Schlüssel für den Build bereitstellen:** Wenn Sie möchten, dass Ihr API-Schlüssel direkt in die ISO integriert wird, erstellen Sie jetzt Ihre `.env`-Datei.
+4.  **Build-Skript ausführen:**
+    ```bash
+   ./build.sh
+    ```
+    Die fertige `.iso`-Datei befindet sich nach Abschluss im Hauptverzeichnis des Projekts.
+
+## Lizenz
+
+Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe die `LICENSE`-Datei für weitere Details.
+```
+
+
 AILinux Beta ISO Builder
 
 

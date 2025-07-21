@@ -1,6 +1,6 @@
 AILinux Build Information
 ========================
-Build Date: Mo 21. Jul 19:17:20 CEST 2025
+Build Date: Mo 21. Jul 19:47:50 CEST 2025
 Distribution: AILinux 24.04 Premium
 Architecture: amd64
 ISO File: ailinux-24.04-premium-amd64.iso
