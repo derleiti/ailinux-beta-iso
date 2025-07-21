@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v19.1 - Fixed Debootstrap & Initial Packages)
+# AILinux ISO Build-Skript (v19.2 - Fixed Debootstrap with Standard Variant)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 #
 # Features:
@@ -170,9 +170,9 @@ EOF
 step_02_bootstrap_and_repos() {
     log_step "2/10" "Basissystem erstellen & Repositories einrichten"
     
-    # FIX: Füge kritische Pakete direkt beim debootstrap hinzu, um "no installation candidate" Fehler zu vermeiden.
-    local essential_packages="ca-certificates,gnupg,dialog,apt-utils,curl,wget,locales"
-    sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase --include=${essential_packages} "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
+    # FIX: Verwende die Standard-Variante von debootstrap (zuverlässiger als minbase)
+    # Dies ist der robusteste Weg, um "no installation candidate" Fehler zu vermeiden.
+    sudo debootstrap --arch="${ARCHITECTURE}" "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     
     # Mounts für chroot vorbereiten
     sudo mount --bind /dev "${CHROOT_DIR}/dev"
@@ -185,7 +185,11 @@ step_02_bootstrap_and_repos() {
         set -e
         echo '${LIVE_HOSTNAME}' > /etc/hostname
         
-        # Locales konfigurieren (Paket ist jetzt vorhanden)
+        # APT-Quellen aktualisieren und grundlegende Werkzeuge sicherstellen
+        apt-get update
+        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates
+        
+        # Locales konfigurieren
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
         locale-gen
         update-locale LANG=en_US.UTF-8
