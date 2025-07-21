@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.6
+# AILinux ISO Build Script v17.7
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now bootstraps from the official
-# Ubuntu mirror and then switches to the AILinux mirror for all
-# subsequent package installations to maximize speed and compatibility.
+# based on Ubuntu 24.04 (noble). It now supports a .env file for configuration
+# and can automatically commit and push the build script to a Git repository
+# after a successful build.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -38,8 +38,8 @@ LIVE_USER="ailinux"
 HOSTNAME="ailinux"
 # Official Ubuntu mirror for the initial bootstrap
 OFFICIAL_UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu"
-# AILinux mirror for all subsequent package installations
-AILINUX_UBUNTU_MIRROR="https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu"
+# Git repository for automatic commits
+GIT_REMOTE_URL="https://github.com/derleiti/ailinux-beta-iso"
 
 # Build Directories
 BUILD_DIR="$(pwd)/AILINUX_BUILD"
@@ -69,6 +69,16 @@ log_step() { log_msg "${COLOR_CYAN}" "STEP" "===== $1 ====="; }
 
 # --- Helper Functions ---
 
+# Load environment variables from .env file
+load_env() {
+    if [ -f "$(pwd)/.env" ]; then
+        log_info "Lade Umgebungsvariablen aus .env Datei..."
+        source "$(pwd)/.env"
+    else
+        log_info "Keine .env Datei gefunden, überspringe."
+    fi
+}
+
 # Check for root/sudo privileges
 check_sudo() {
     if [ "$(id -u)" -eq 0 ]; then
@@ -85,7 +95,8 @@ check_sudo() {
 check_dependencies() {
     log_info "Überprüfe Abhängigkeiten..."
     local missing_deps=()
-    local deps=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "curl" "gpg")
+    # Added 'git' for the auto-commit feature
+    local deps=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "curl" "gpg" "git")
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             missing_deps+=("$dep")
@@ -189,6 +200,7 @@ trap 'cleanup' EXIT SIGINT SIGTERM
 
 # --- STEP 1: Initial Setup ---
 log_step "1/12: Initialisierung und Setup"
+load_env
 check_sudo
 check_dependencies
 
@@ -207,7 +219,6 @@ log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
 # --- STEP 2: Debootstrap Base System ---
 log_step "2/12: Erstelle Basissystem mit Debootstrap vom offiziellen Mirror"
-# Use the official mirror for the initial bootstrap to avoid GPG issues
 sudo debootstrap \
     --arch=amd64 \
     --variant=minbase \
@@ -228,7 +239,6 @@ safe_mount "/dev/pts" "/dev/pts" "${CHROOT_DIR}/dev/pts"
 
 # --- STEP 4: Systemkonfiguration und Wechsel zum AILinux Mirror ---
 log_step "4/12: Konfiguriere System & wechsle zum AILinux Mirror"
-# Unquote EOF to allow host variables to be expanded
 sudo chroot "${CHROOT_DIR}" /bin/bash << EOF
 set -e
 export DEBIAN_FRONTEND=noninteractive
@@ -243,8 +253,6 @@ apt-get update
 apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget zstd
 
 # Add AILinux repository and switch to AILinux mirror
-# The add-ailinux-repo.sh script is expected to replace /etc/apt/sources.list
-# with the fast AILinux mirror and add the AILinux repository itself.
 echo "Füge AILinux Repository hinzu und wechsle zum Mirror..."
 curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
 echo "Repository hinzugefügt und Mirror gewechselt. Aktualisiere Paketlisten erneut..."
@@ -497,7 +505,7 @@ log_info "Erstelle ISO mit xorriso (dies kann einige Zeit dauern)..."
 )
 log_info "ISO-Datei erfolgreich erstellt: ${BUILD_DIR}/${ISO_NAME}"
 
-# --- STEP 12: Finalisieren und Aufräumen ---
+# --- STEP 12: Finalisieren und Ergebnisse anzeigen ---
 log_step "12/12: Finalisieren und Ergebnisse anzeigen"
 sudo chown "${ORIGINAL_USER}":"${ORIGINAL_USER}" "${BUILD_DIR}/${ISO_NAME}"
 log_info "Besitz der ISO-Datei auf ${ORIGINAL_USER} übertragen."
@@ -511,6 +519,44 @@ echo -e "=======================================================${COLOR_RESET}\n
 echo -e "${COLOR_GREEN}ISO-Datei: ${BUILD_DIR}/${ISO_NAME}${COLOR_RESET}"
 echo -e "${COLOR_GREEN}Größe:     ${ISO_SIZE}${COLOR_RESET}"
 echo -e "${COLOR_GREEN}SHA256:    ${ISO_HASH}${COLOR_RESET}\n"
+
+# --- STEP 13: Automatischer Git Commit & Push ---
+log_step "13/13: Automatischer Git Commit & Push"
+if [ -z "${GITPAT}" ]; then
+    log_warn "GITPAT nicht in .env gefunden. Überspringe automatischen Commit."
+    exit 0
+fi
+
+if [ ! -d ".git" ]; then
+    log_warn "Kein .git-Verzeichnis gefunden. Überspringe automatischen Commit."
+    exit 0
+fi
+
+# Check if there are any changes to commit
+if git diff-index --quiet HEAD --; then
+    log_info "Keine Änderungen im Git-Repository gefunden. Nichts zu tun."
+else
+    log_info "Änderungen gefunden. Erstelle Commit und pushe..."
+    
+    # Construct authenticated remote URL
+    REMOTE_HOST_PATH="${GIT_REMOTE_URL#*//}"
+    AUTH_REMOTE_URL="https://${GITPAT}@${REMOTE_HOST_PATH}"
+    
+    git config --global user.name "AILinux Build Bot"
+    git config --global user.email "buildbot@ailinux.me"
+    
+    git add .
+    COMMIT_MSG="[AILinux Build] Neue ISO erstellt am $(date +'%Y-%m-%d %H:%M:%S')"
+    git commit -m "${COMMIT_MSG}"
+    
+    log_info "Pushe Änderungen nach ${GIT_REMOTE_URL}..."
+    if git push -f "${AUTH_REMOTE_URL}" main; then
+        log_info "Push erfolgreich."
+    else
+        log_error "Git Push fehlgeschlagen."
+    fi
+fi
+
 log_info "Das Build-Verzeichnis wird beim Beenden automatisch entfernt."
 
 exit 0
