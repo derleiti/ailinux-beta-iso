@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.3
+# AILinux ISO Build Script v17.4
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now downloads the mirror's GPG key
-# beforehand and passes it to debootstrap to fix signature verification errors.
+# based on Ubuntu 24.04 (noble). It now correctly handles custom mirror GPG keys
+# by temporarily adding them to the host's trusted APT keys for debootstrap.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -44,6 +44,7 @@ BUILD_DIR="$(pwd)/AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
 ISO_NAME="ailinux-${AILINUX_VERSION}-amd64.iso"
+TEMP_GPG_KEY_PATH="/etc/apt/trusted.gpg.d/ailinux-build-key.gpg"
 
 # --- Logging and Colors ---
 COLOR_RESET='\033[0m'
@@ -155,6 +156,13 @@ safe_umount() {
 # Cleanup function to be called on exit or error
 cleanup() {
     log_step "Aufräumen"
+    
+    # FIX: Remove temporary GPG key from host
+    if [ -f "${TEMP_GPG_KEY_PATH}" ]; then
+        log_info "Entferne temporären GPG-Schlüssel vom Host-System..."
+        sudo rm -f "${TEMP_GPG_KEY_PATH}"
+    fi
+
     safe_umount "${CHROOT_DIR}/dev/pts"
     safe_umount "${CHROOT_DIR}/dev"
     safe_umount "${CHROOT_DIR}/proc"
@@ -202,20 +210,21 @@ fi
 mkdir -p "${BUILD_DIR}" "${ISO_DIR}" "${CHROOT_DIR}"
 log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
-# FIX: Download the GPG key for the mirror before running debootstrap
-log_info "Lade AILinux GPG-Schlüssel für Debootstrap herunter..."
+# FIX: Download the GPG key and add it to the host's trusted keys for debootstrap
+log_info "Lade AILinux GPG-Schlüssel herunter..."
 if ! curl -fksSL "${AILINUX_GPG_KEY_URL}" -o "${BUILD_DIR}/ailinux.gpg"; then
     log_error "Herunterladen des AILinux GPG-Schlüssels fehlgeschlagen."
 fi
-log_info "GPG-Schlüssel heruntergeladen."
+log_info "Füge GPG-Schlüssel temporär zum Host-System hinzu..."
+sudo cp "${BUILD_DIR}/ailinux.gpg" "${TEMP_GPG_KEY_PATH}"
+log_info "GPG-Schlüssel hinzugefügt."
 
 # --- STEP 2: Debootstrap Base System ---
 log_step "2/12: Erstelle Basissystem mit Debootstrap"
-# FIX: Pass the downloaded keyring to debootstrap
+# FIX: Removed the --keyring option. Debootstrap will now use the host's trusted keys.
 sudo debootstrap \
     --arch=amd64 \
     --variant=minbase \
-    --keyring="${BUILD_DIR}/ailinux.gpg" \
     "${BASE_DISTRO}" \
     "${CHROOT_DIR}" \
     "${UBUNTU_MIRROR}"
