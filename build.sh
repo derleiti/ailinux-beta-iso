@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.3 - Final ISO Fix)
+# AILinux ISO Build-Skript (v17.4 - Final UDF Fix)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # und den Spezifikationen in prompt.txt.
 #
@@ -195,7 +195,6 @@ step_06_chroot_desktop() {
         
         log_info() { echo "[CHROOT-INFO] $1"; }
         
-        # --- KORREKTUR: Service-Starts simulieren, um Fehler zu vermeiden ---
         log_info "Simuliere Systemdienste für die Installation..."
         cat > /usr/sbin/invoke-rc.d << "INVOKE_RC_D_STUB"
 #!/bin/sh
@@ -218,7 +217,6 @@ INVOKE_RC_D_STUB
         
         log_info "Installiere alle Desktop-Komponenten in einem Schritt..."
         
-        # KORREKTUR: Alle Pakete in einem Befehl installieren und Abhängigkeiten explizit auflösen
         apt-get install -y \
             systemd-coredump \
             kde-full \
@@ -260,7 +258,6 @@ INVOKE_RC_D_STUB
         systemctl enable NetworkManager || true
         systemctl enable sddm || true
 
-        # --- KORREKTUR: Service-Simulation entfernen ---
         log_info "Entferne Service-Simulation..."
         rm /usr/sbin/invoke-rc.d
 EOF
@@ -276,7 +273,6 @@ step_07_chroot_calamares() {
         
         apt-get install -y calamares imagemagick
         
-        # 1. settings.conf mit korrekter Sequenz
         mkdir -p /etc/calamares
         cat > /etc/calamares/settings.conf << "SETTINGS"
 modules-search: [ local, /usr/share/calamares/modules ]
@@ -297,7 +293,6 @@ sequence:
       - umount
 SETTINGS
 
-        # 2. Branding-Konfiguration
         mkdir -p /etc/calamares/branding/ailinux
         cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
 ---
@@ -312,7 +307,6 @@ BRANDING
                 -gravity center -draw "text 0,0 'AILinux'" \
                 /etc/calamares/branding/ailinux/logo.png
 
-        # 3. Wichtige Modul-Konfigurationen erstellen
         mkdir -p /etc/calamares/modules
 
         cat > /etc/calamares/modules/unpackfs.conf << "UNPACKFS"
@@ -362,10 +356,8 @@ Session=plasma
 Relogin=false
 AUTOLOGIN_CONF
 
-        # Desktop-Verzeichnisse erstellen
         mkdir -p "/home/${LIVE_USER}/Desktop"
         
-        # Calamares Installer-Verknüpfung
         cat > "/home/${LIVE_USER}/Desktop/Install AILinux.desktop" << DESKTOP_FILE
 [Desktop Entry]
 Name=Install AILinux
@@ -379,12 +371,10 @@ Type=Application
 Categories=System;
 DESKTOP_FILE
 
-        # Andere Anwendungs-Verknüpfungen
         ln -s /usr/share/applications/org.kde.konsole.desktop "/home/${LIVE_USER}/Desktop/"
         ln -s /usr/share/applications/firefox.desktop "/home/${LIVE_USER}/Desktop/"
         ln -s /usr/share/applications/google-chrome.desktop "/home/${LIVE_USER}/Desktop/"
 
-        # .bashrc mit Willkommensnachricht anpassen
         cat >> "/home/${LIVE_USER}/.bashrc" << 'BASHRC_CUSTOM'
 
 # AILinux Welcome Message
@@ -488,11 +478,12 @@ step_12_create_iso() {
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
-    # KORREKTUR: Standard-Flags für große Dateien verwenden
+    # KORREKTUR: -udf Flag hinzugefügt, um das 4-GiB-Dateilimit zu umgehen
     sudo xorriso -as mkisofs \
         -r -V "${volume_id}" \
         -o "${BUILD_DIR}/${ISO_NAME}" \
         -J -joliet-long -l \
+        -udf \
         --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
         -partition_offset 16 \
         --mbr-force-bootable \
