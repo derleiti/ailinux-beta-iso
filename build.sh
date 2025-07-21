@@ -221,8 +221,9 @@ EOF
         apt-get update
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release
 
-        # HINZUGEFÜGT: AILinux-Repository hinzufügen
-        log_info 'Adding AILinux custom repository...'
+        # KORREKTUR: 'log_info' wurde durch 'echo' ersetzt, da die log_info-Funktion
+        # innerhalb der chroot-Umgebung nicht verfügbar ist.
+        echo 'Adding AILinux custom repository...'
         curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
         
         # Setup locales
