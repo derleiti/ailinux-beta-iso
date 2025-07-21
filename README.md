@@ -1,73 +1,88 @@
-AILinux ISO Build Skript
-Dieses Repository enthält das offizielle Build-Skript zur Erstellung einer bootfähigen AILinux Live-ISO. Das Skript ist darauf ausgelegt, einen vollständigen, robusten und wiederholbaren Build-Prozess auf einem Debian-basierten Host-System (wie Ubuntu) durchzuführen.
+# AILinux Beta ISO 🐧
 
-✨ Features
-Automatisierter 12-Schritte-Prozess: Von der System-Basis bis zur finalen ISO-Datei ist der gesamte Ablauf automatisiert.
+**AILinux Beta ISO** ist ein Open‑Source‑Projekt, das eine minimalistische, leichtgewichtige ISO‑Distribution auf Debian/Ubuntu‑Basis bereitstellt – optimiert für Experimentierzwecke und schnelle Testinstallationen.
 
-UEFI & BIOS Support: Erstellt eine hybride ISO, die sowohl auf modernen UEFI-Systemen als auch auf älteren BIOS-Rechnern bootet.
+---
 
-Grafischer Installer: Integriert den Calamares Installer für eine benutzerfreundliche Systeminstallation.
+## 🚀 Features
 
-Robustes Fehler-Handling: Umfasst eine sichere Mount-/Unmount-Logik und eine automatische Cleanup-Funktion, die bei Fehlern oder am Ende des Builds aufräumt.
+- **Clean, minimal core**: Nur essentielle Pakete, ohne unnötige Bloatware.
+- **Automatisierte Builds**: ISO wird über Skripte (`build.sh`, `clean.sh`) erstellt.
+- **Branding‑Support**: Optionen für eigenes Logo und Texte, leicht anpassbar via `branding/`.
+- **Git‑LFS Vorbereitung**: Keine großen Binärdateien im Repo, unterstützt sauberen Source‑Control‑Workflow.
 
-Zentralisierte Konfiguration: Nutzt ein externes Skript (add-ailinux-repo.sh) zur Einrichtung aller Paketquellen, was die Wartung vereinfacht.
+---
 
-Anpassbar: Das Skript ist durch Variablen und klar getrennte Funktionsblöcke leicht anpassbar.
+## 🧪 Quick Start
 
-🚀 Erste Schritte
-1. Voraussetzungen (Host-System)
-Stelle sicher, dass dein Host-System (z. B. Ubuntu 24.04) über alle notwendigen Werkzeuge verfügt. Führe dazu folgenden Befehl aus:
+### Repository klonen
 
-Bash
+```bash
+git clone https://github.com/derleiti/ailinux-beta-iso.git
+cd ailinux-beta-iso
+ISO generieren
+bash
+Kopieren
+Bearbeiten
+./clean.sh    # bereitet die Build‑Umgebung vor
+./build.sh    # baut die ISO
+Am Ende findest du die erzeugte .iso im Build‑Verzeichnis.
 
-sudo apt-get update
-sudo apt-get install debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
-  shim-signed ovmf mtools wget curl gnupg isolinux syslinux-common dosfstools psmisc lsof
-2. Skript ausführen
-Um den Build-Prozess zu starten, mache das Skript ausführbar und führe es aus:
+📁 Verzeichnisstruktur
+text
+Kopieren
+Bearbeiten
+.
+├── branding/              # Branding‑Assets (Bilder, Texte)
+├── build.sh               # Erzeugt die ISO
+├── clean.sh               # Bereinigt temporäre Dateien
+├── prompt.txt             # Beispiel‑Prompt für Installer
+├── README.md              # Dieses Dokument
+├── SECURITY.md            # Sicherheitsrichtlinien für das Projekt
+└── .gitignore             # Filtert große Binärdateien aus
+🛠️ Entwicklung & Beiträge
+Branding ändern: Assets in branding/ anpassen (Logo, Hintergrund, etc.).
 
-Bash
+Build‑Anpassungen: build.sh enthält die Hauptlogik zum ISO‑Erstellen.
 
-chmod +x build.sh
-./build.sh
-Das Skript darf nicht mit sudo oder als root gestartet werden. Es wird bei Bedarf selbstständig nach sudo-Rechten fragen.
+Code‑Contributions: Fork → Feature‑Branch → Pull‑Request (mit Beschreibung).
 
-3. Notfall-Cleanup
-Sollte der Build-Prozess einmal fehlschlagen und Mount-Punkte oder Verzeichnisse zurücklassen, kannst du die Notfall-Cleanup-Funktion nutzen:
+💾 Deployment – ohne Git-LFS
+Große ISO-Dateien bleiben aus dem Git‑Repo ausgeschlossen.
+Optionen zum Bereitstellen:
 
-Bash
+GitHub Releases:
+gh release create vX.Y.Z path/to/ailinux.iso --title "AILinux Beta X.Y.Z" --notes "Changelog..."
 
-./build.sh --cleanup
-🛠️ Der Build-Prozess im Detail
-Das Skript folgt einem bewährten 12-Schritte-Ablauf, um eine konsistente und funktionale ISO zu gewährleisten.
+Eigener Server:
+Beispiel: https://ailinux.me/downloads/ailinux.iso
 
-Schritt	Aktion	Beschreibung
-1	Host vorbereiten	Installiert alle Abhängigkeiten auf dem Build-Rechner.
-2	Verzeichnisstruktur anlegen	Erstellt eine saubere Arbeitsumgebung (AILINUX_BUILD/chroot und AILINUX_BUILD/iso).
-3	Basissystem installieren	Installiert via debootstrap ein Ubuntu-Minimalsystem in das chroot-Verzeichnis.
-4	Netzwerk & Service-Block	Konfiguriert DNS für die Chroot-Umgebung und verhindert den Start von Diensten.
-5	Chroot-Skript erstellen	Generiert dynamisch ein Skript, das alle Operationen innerhalb des Chroots ausführt.
-6	Chroot-Umgebung einrichten	Führt das Chroot-Skript aus: Repositories hinzufügen, Pakete installieren, System
-konfigurieren (Live-User, Autologin, Calamares).
-7	Pseudo-Dateisysteme unmounten	Bereinigt nach dem Chroot alle System-Mounts (/dev, /proc, etc.) sicher.
-8	SquashFS erzeugen	Komprimiert das gesamte chroot-Verzeichnis in die filesystem.squashfs-Datei.
-9	Manifest & Metadaten generieren	Erstellt eine Paketliste (.manifest), die Größen-Info und das .disk/info-Branding.
-10	Bootloader einrichten	Konfiguriert ISOLINUX für BIOS-Boot und GRUB in einem efi.img für UEFI-Boot.
-11	Finale ISO erzeugen	Nutzt xorriso, um alle Komponenten zu einer bootfähigen Hybrid-ISO zusammenzufügen.
-12	Abschluss & Validierung	Setzt den Besitz der ISO-Datei auf den ursprünglichen Benutzer zurück und gibt Größe
-sowie die SHA256-Prüfsumme aus.
+📄 Lizenz & Sicherheit
+Lizenz: Siehe LICENSE (üblicherweise MIT/BSD).
 
-In Google Sheets exportieren
-🔧 Calamares-Integration
-Der grafische Installer Calamares wird automatisch in das System integriert:
+Sicherheitsrichtlinie: Siehe SECURITY.md.
 
-Installation: Das Paket calamares wird zusammen mit der Desktop-Umgebung installiert.
+📞 Support & Kontakt
+Für Ideen, Bugs oder Support:
 
-Desktop-Launcher: Eine .desktop-Datei (install-ailinux.desktop) wird auf dem Desktop des Live-Users platziert, die den Installer mit pkexec calamares startet.
+📩 Issues: Im GitHub‑Issue‑Tracker.
 
-Branding: Das Skript passt die settings.conf von Calamares an, um das Branding ailinux zu verwenden. Eigene Branding-Assets können im Chroot unter /etc/calamares/branding/ailinux/ platziert werden.
+💬 Discussions: Für allgemeine Fragen oder Anwendungsfälle.
 
-Wichtiger Hinweis: Der Build-Prozess erzeugt ein einzelnes filesystem.squashfs, da dies die von Calamares erwartete und am besten unterstützte Methode ist.
+🛠️ Pull‑Requests willkommen!
 
-📜 Lizenz
-Dieses Projekt steht unter der MIT-Lizenz.
+✅ Status & To‑Do
+✅ ISO‑Build funktioniert sauber
+
+✅ README, SECURITY, Build‑Skripte vorhanden
+
+🔲 Automatisierte Test‑Pipeline (z. B. CI/CD) auf To‑Do‑Liste
+
+🔲 ISO‑Download bereitstellen via Releases oder Server
+
+⚠️ Hinweis
+AILinux Beta ISO ist ein Tool für schnelle Test‑Setups – nicht für produktive Nutzung.
+build.sh erzeugt Standard‑ISO, sollte vor der Verteilung kontrolliert werden.
+
+Viel Spaß beim Ausprobieren, Anpassen und Mitgestalten! 😊
+— Markus (alias zombie, Entwickler & Build‑Master)
