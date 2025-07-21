@@ -221,22 +221,24 @@ EOF
         apt-get update
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release
 
+        # Add Microsoft VS Code repository
+        echo 'Adding Microsoft VS Code repository...'
+        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/packages.microsoft.gpg
+        echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' > /etc/apt/sources.list.d/vscode.list
+
         # Add AILinux repository (this script will also handle external repos like Chrome, Wine, etc.)
         echo 'Adding AILinux custom repository and other external sources...'
-        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
+        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash || {
+            echo 'Warning: AILinux repo script not available, continuing without it...'
+        }
         
         # Setup locales
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
         locale-gen
         update-locale LANG=en_US.UTF-8
         
-        # The i386 architecture is now handled by the add-ailinux-repo.sh script.
-        # We only need to run the command, the script takes care of the rest.
+        # Enable i386 architecture for Wine
         dpkg --add-architecture i386
-        
-        # KORREKTUR: Die folgenden Repository-Definitionen wurden entfernt.
-        # Das Skript 'add-ailinux-repo.sh' übernimmt diese Aufgabe, wodurch
-        # der Konflikt bei den GPG-Schlüsseln ('Signed-By') behoben wird.
         
         # Final update to fetch all package lists from all configured sources
         apt-get update
@@ -265,23 +267,28 @@ step_03_install_packages() {
             kde-full plasma-desktop sddm-theme-breeze \
             xorg xinit x11-xserver-utils
         
-        # Install applications
+        # Install applications (note: spectacle is included in kde-full as kde-spectacle)
         apt-get install -y \
             firefox thunderbird vlc gimp \
             libreoffice libreoffice-l10n-en-us \
             gparted htop neofetch konsole kate okular \
-            gwenview spectacle ark dolphin \
+            gwenview ark dolphin \
             ubuntu-restricted-extras ffmpeg \
             pulseaudio pulseaudio-utils pavucontrol \
             google-chrome-stable \
             winehq-staging winetricks \
-            code git build-essential \
+            git build-essential \
             python3 python3-pip python3-venv \
             nodejs npm default-jdk \
             linux-firmware bluez bluetooth \
             wpasupplicant printer-driver-all cups \
             jq tree vim nano curl wget \
             software-properties-common apt-transport-https
+        
+        # Install VS Code (from Microsoft repository)
+        apt-get install -y code || {
+            echo 'Warning: VS Code installation failed, continuing without it...'
+        }
     "
     log_success "All core packages and desktop environment installed."
 }
