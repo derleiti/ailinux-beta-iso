@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.0
+# AILinux ISO Build Script v17.2
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now uses the 'kde-full' metapackage
-# for a more robust and complete KDE Plasma installation.
+# based on Ubuntu 24.04 (noble). It now uses a configurable mirror
+# for all Ubuntu package downloads to accelerate the build process.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -35,6 +35,8 @@ DISTRO_NAME="AILinux"
 BASE_DISTRO="noble"
 LIVE_USER="ailinux"
 HOSTNAME="ailinux"
+# Use the AILinux mirror for all Ubuntu packages
+UBUNTU_MIRROR="https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu"
 
 # Build Directories
 BUILD_DIR="$(pwd)/AILINUX_BUILD"
@@ -201,7 +203,8 @@ log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
 # --- STEP 2: Debootstrap Base System ---
 log_step "2/12: Erstelle Basissystem mit Debootstrap"
-sudo debootstrap --arch=amd64 --variant=minbase "${BASE_DISTRO}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
+# Use the custom mirror for debootstrap
+sudo debootstrap --arch=amd64 --variant=minbase "${BASE_DISTRO}" "${CHROOT_DIR}" "${UBUNTU_MIRROR}"
 log_info "Basissystem für ${BASE_DISTRO} erfolgreich erstellt."
 
 # --- STEP 3: Chroot-Vorbereitung ---
@@ -216,7 +219,8 @@ safe_mount "/dev/pts" "/dev/pts" "${CHROOT_DIR}/dev/pts"
 
 # --- STEP 4: Systemkonfiguration und Repository hinzufügen ---
 log_step "4/12: Konfiguriere Basissystem & füge AILinux Repo hinzu"
-sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
+# Unquote EOF to allow host variables like $UBUNTU_MIRROR to be expanded
+sudo chroot "${CHROOT_DIR}" /bin/bash << EOF
 set -e
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
@@ -225,21 +229,21 @@ export LC_ALL=C
 # Set hostname
 echo "ailinux" > /etc/hostname
 
-# Configure APT sources
+# Configure APT sources to use the custom mirror
 cat > /etc/apt/sources.list << EOL
-deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
-deb-src http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
-deb-src http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
-deb-src http://archive.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
-deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
-deb-src http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
+deb ${UBUNTU_MIRROR} ${BASE_DISTRO} main restricted universe multiverse
+deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO} main restricted universe multiverse
+deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-updates main restricted universe multiverse
+deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-updates main restricted universe multiverse
+deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-security main restricted universe multiverse
+deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-security main restricted universe multiverse
+deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-backports main restricted universe multiverse
+deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-backports main restricted universe multiverse
 EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget
+apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget zstd
 
 # Add AILinux repository
 echo "Füge AILinux Repository hinzu..."
@@ -284,10 +288,11 @@ dpkg --add-architecture i386
 apt-get update
 
 # Install full application suite including German language packs
-# FIX: Switched to kde-full metapackage for robustness
 apt-get install -y --no-install-recommends \
     sddm \
     kde-full \
+    cups \
+    samba \
     language-pack-de \
     language-pack-kde-de \
     firefox \
