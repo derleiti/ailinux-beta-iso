@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.8
+# AILinux ISO Build Script v16.9
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now includes 'wget' to the
-# prerequisite packages for external repository scripts.
+# based on Ubuntu 24.04 (noble). It removes the deprecated 'lupin-casper'
+# package to fix installation errors on newer Ubuntu bases.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -263,9 +263,10 @@ log_step "5/12: Installiere Kernel und Live-Boot-Pakete"
 sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
 set -e
 export DEBIAN_FRONTEND=noninteractive
+# FIX: Removed deprecated lupin-casper package
 apt-get install -y --no-install-recommends \
     linux-image-generic \
-    casper lupin-casper \
+    casper \
     network-manager net-tools wireless-tools \
     plymouth plymouth-theme-kubuntu-logo \
     ubuntu-standard \
