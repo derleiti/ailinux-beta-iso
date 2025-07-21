@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.4
+# AILinux ISO Build Script v16.5
 #
 # This script automates the creation of a bootable AILinux Live ISO
 # based on Ubuntu 24.04 (noble). It now includes an automatic
-# dependency installation prompt.
+# dependency installation prompt and a fix for the chroot mount command.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -117,7 +117,8 @@ safe_mount() {
     local delay=2
 
     for ((i=1; i<=attempts; i++)); do
-        if sudo mount "${options}" "${source}" "${target}"; then
+        # FIX: Removed quotes around ${options} to allow for word splitting (e.g., for "-t proc")
+        if sudo mount ${options} "${source}" "${target}"; then
             log_info "Mount erfolgreich: ${target}"
             return 0
         fi
