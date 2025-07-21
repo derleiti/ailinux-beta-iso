@@ -121,15 +121,32 @@ trap 'log_error "Skript unerwartet beendet."; cleanup; exit 1' INT TERM ERR
 step_01_setup_environment() {
     log_step "1/12" "Umgebung einrichten und Abhängigkeiten prüfen"
     
-    # Notwendige Pakete prüfen
+    # Notwendige Pakete auf dem Host-System prüfen und ggf. installieren
     local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common")
+    local missing_deps=()
+    log_info "Prüfe Abhängigkeiten..."
     for dep in "${dependencies[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
-            log_error "Fehlende Abhängigkeit: '$dep'. Bitte installieren Sie es (z.B. mit 'sudo apt install $dep')."
-            exit 1
+            missing_deps+=("$dep")
         fi
     done
-    log_info "Alle Abhängigkeiten sind vorhanden."
+
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        log_warn "Folgende Abhängigkeiten fehlen: ${missing_deps[*]}"
+        read -p "Sollen diese automatisch installiert werden? (j/N) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Jj]$ ]]; then
+            log_info "Installiere fehlende Abhängigkeiten..."
+            sudo apt-get update
+            sudo apt-get install -y "${missing_deps[@]}"
+            log_success "Abhängigkeiten erfolgreich installiert."
+        else
+            log_error "Installation abgebrochen. Bitte installieren Sie die Pakete manuell."
+            exit 1
+        fi
+    else
+        log_info "Alle Abhängigkeiten sind bereits vorhanden."
+    fi
 
     # Build-Verzeichnisstruktur erstellen
     sudo rm -rf "${BUILD_DIR}"
@@ -224,8 +241,8 @@ step_07_chroot_calamares() {
         set -e
         export DEBIAN_FRONTEND=noninteractive
         
-        # Calamares und Ubuntu-spezifische Module installieren
-        apt-get install -y calamares calamares-settings-ubuntu
+        # Calamares, Ubuntu-Module und imagemagick (für Logos) installieren
+        apt-get install -y calamares calamares-settings-ubuntu imagemagick
         
         # Branding für AILinux setzen
         # Hinweis: Die genauen Keys können sich ändern. Dies ist ein Beispiel.
@@ -233,6 +250,7 @@ step_07_chroot_calamares() {
         
         # Ein eigenes Branding-Modul wäre der nächste Schritt
         # Hier eine einfache Anpassung des Produktnamens
+        mkdir -p /etc/calamares/branding/ailinux
         cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
 [Branding]
 componentName: ailinux
