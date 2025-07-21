@@ -1,14 +1,13 @@
 #!/bin/bash
 #
-# AILinux Safe Push-Skript (v2.1 - Interactive Commit)
-# Pusht den aktuellen Branch sicher zum Remote-Repository.
-# Prüft auf uncommitted Änderungen, fragt nach einer Commit-Nachricht
-# und committet sie vor dem Push.
-# Verwendet Force-Push nur, wenn es explizit mit dem --force-Flag aufgerufen wird.
+# AILinux Safe Push-Skript (v2.2 - GitHub mit PAT und optionalem Force)
+# Automatisierter Commit + Push mit interaktiver Eingabe
+# Unterstützt sichere Authentifizierung mit GitHub-PAT
+# Verhindert versehentlichen Upload großer ISO-Dateien (>2 GiB)
 
 set -e
 
-BRANCH=$(git rev-parse --abbrev-ref HEAD) # Aktuellen Branch automatisch erkennen
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
 REMOTE_URL="https://github.com/derleiti/ailinux-beta-iso.git"
 
 echo -n "🔐 Gib deinen GitHub PAT ein (wird nicht angezeigt): "
@@ -20,50 +19,55 @@ if [ -z "$PAT" ]; then
     exit 1
 fi
 
-# Authentifizierte URL für den Push erstellen
-# Verwendet oauth2 für PAT-Authentifizierung
 AUTH_URL="https://oauth2:${PAT}@github.com/derleiti/ailinux-beta-iso.git"
 
-# Prüfen, ob ein Commit notwendig ist
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "\n📝 Änderungen zum Commit gefunden."
-    git status -s # Zeigt eine kurze Zusammenfassung der Änderungen
-    echo
-    read -p "Gib eine Commit-Nachricht ein (Standard: 'Update'): " COMMIT_MSG
-
-    # Fallback auf Standard-Commit-Text
-    if [ -z "$COMMIT_MSG" ]; then
-        COMMIT_MSG="Update"
-    fi
-
-    # Änderungen vorbereiten und committen
-    echo -e "\n✨ Committe Änderungen..."
-    git add .
-    git commit -m "$COMMIT_MSG"
-    echo "✅ Änderungen committed: $COMMIT_MSG"
-else
-    echo -e "\n📦 Keine neuen Änderungen zum Commit gefunden."
+# ISO-Dateien automatisch ignorieren
+if ! grep -q '\*.iso' .gitignore 2>/dev/null; then
+    echo "*.iso" >> .gitignore
+    echo "*.iso.sha256" >> .gitignore
+    echo "📁 .gitignore um ISO-Dateien ergänzt."
 fi
 
-# Prüfen auf --force Flag für den einmaligen Fix nach dem History-Cleanup
-FORCE_FLAG=""
-if [ "$1" == "--force" ]; then
-    FORCE_FLAG="--force"
-    echo -e "\n🟠 WARNUNG: Force-Push wird ausgeführt! Dies sollte nur nach dem Bereinigen der Git-Historie notwendig sein."
+# Großes ISO versehentlich getrackt?
+LARGE_ISO=$(git ls-files | grep '\.iso$' || true)
+if [ -n "$LARGE_ISO" ]; then
+    echo "⚠️  Entferne versehentlich getrackte ISO-Dateien:"
+    echo "$LARGE_ISO"
+    git rm --cached $LARGE_ISO
+fi
+
+# Änderungen commiten, falls vorhanden
+if [ -n "$(git status --porcelain)" ]; then
+    echo -e "\n📝 Änderungen gefunden:"
+    git status -s
+    echo
+    read -p "Gib eine Commit-Nachricht ein (Standard: 'Update'): " COMMIT_MSG
+    COMMIT_MSG=${COMMIT_MSG:-Update}
+    git add .
+    git commit -m "$COMMIT_MSG"
+    echo "✅ Committed: $COMMIT_MSG"
+else
+    echo -e "\n📦 Keine neuen Änderungen zum Commit."
+fi
+
+# Optionaler Force-Push
+FORCE=""
+if [[ "$1" == "--force" ]]; then
+    echo "⚠️  Du hast '--force' angegeben. Ein Force-Push wird durchgeführt."
+    FORCE="--force"
 fi
 
 echo
-echo "📤 Pushe Branch '$BRANCH' auf Remote..."
+echo "📤 Pushe Branch '$BRANCH' nach:"
 echo "➡  $REMOTE_URL"
 
-# Push ausführen
-git push $FORCE_FLAG "$AUTH_URL" "$BRANCH"
+git push $FORCE "$AUTH_URL" "$BRANCH"
 
 if [ $? -eq 0 ]; then
-    echo -e "\n✅ Push erfolgreich!"
+    echo -e "\n✅ Push erfolgreich abgeschlossen!"
 else
     echo -e "\n❌ Push fehlgeschlagen!"
-    echo "Mögliche Gründe:"
-    echo "  - Dein lokaler Branch ist nicht aktuell. Führe 'git pull' aus."
-    echo "  - Der PAT ist ungültig oder hat nicht die nötigen Berechtigungen."
+    echo "💡 Tipps:"
+    echo " - Prüfe Internetverbindung und Branch-Status."
+    echo " - Verwende ggf. '--force' nach History-Bereinigung."
 fi
