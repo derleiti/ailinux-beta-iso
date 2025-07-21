@@ -1,56 +1,73 @@
-AILinux 24.04 - Build System v10.7: Production Ready 🚀
-Wir freuen uns, die Veröffentlichung von Version 10.7 unseres ISO-Build-Systems bekannt zu geben! Nach einer intensiven Phase der Entwicklung, des Debuggings und der Optimierung haben wir einen stabilen, robusten und hochautomatisierten Prozess erreicht, der es uns ermöglicht, qualitativ hochwertige AILinux-ISOs zu erstellen.
+AILinux ISO Build Skript
+Dieses Repository enthält das offizielle Build-Skript zur Erstellung einer bootfähigen AILinux Live-ISO. Das Skript ist darauf ausgelegt, einen vollständigen, robusten und wiederholbaren Build-Prozess auf einem Debian-basierten Host-System (wie Ubuntu) durchzuführen.
 
-Dieses Release markiert den Übergang von einem experimentellen Skript zu einem produktionsreifen Werkzeug, das auf den besten Praktiken der Community und den offiziellen Methoden großer Distributionen wie Fedora und Ubuntu basiert.
+✨ Features
+Automatisierter 12-Schritte-Prozess: Von der System-Basis bis zur finalen ISO-Datei ist der gesamte Ablauf automatisiert.
 
-✨ Highlights dieser Version
-Das Build-Skript v10.7 ist das Ergebnis zahlreicher Verbesserungen und Korrekturen. Die wichtigsten Merkmale sind:
+UEFI & BIOS Support: Erstellt eine hybride ISO, die sowohl auf modernen UEFI-Systemen als auch auf älteren BIOS-Rechnern bootet.
 
-Maximale Boot-Kompatibilität: Durch eine sorgfältig konfigurierte xorriso-Befehlskette und manuell erstellte Boot-Images wird sowohl Legacy BIOS als auch modernes UEFI (inklusive GPT-Partitionierung) vollständig unterstützt. Die ISO ist damit Hybrid und direkt auf USB-Sticks schreibbar.
+Grafischer Installer: Integriert den Calamares Installer für eine benutzerfreundliche Systeminstallation.
 
-Stabilität nach Community-Vorbild: Wir haben die Konfigurationen an anerkannte Methoden (z.B. die "Fedora-Methode" für isohybrid) angepasst, um eine breite Kompatibilität mit verschiedenster Hardware und Bootloadern wie Ventoy zu gewährleisten.
+Robustes Fehler-Handling: Umfasst eine sichere Mount-/Unmount-Logik und eine automatische Cleanup-Funktion, die bei Fehlern oder am Ende des Builds aufräumt.
 
-Automatisierte Fehlervermeidung: Das Skript führt zahlreiche Selbstprüfungen durch, darunter:
+Zentralisierte Konfiguration: Nutzt ein externes Skript (add-ailinux-repo.sh) zur Einrichtung aller Paketquellen, was die Wartung vereinfacht.
 
-Verifizierung der MBR- und EFI-Boot-Dateien.
-
-Eine Größenwarnung für das filesystem.squashfs, um Probleme mit FAT32-formatierten USB-Sticks zu vermeiden.
-
-Eine finale Integritätsprüfung des erstellten ISO-Abbilds.
-
-Optimierte Performance: Durch den Einsatz der zstd-Kompression und die explizite Nutzung aller verfügbaren CPU-Kerne (-processors $(nproc)) wird der zeitaufwändigste Schritt – die Erstellung des SquashFS-Images – erheblich beschleunigt.
-
-Produktionsreife Dokumentation: Das Skript ist nun ausführlich kommentiert und enthält am Ende eine Zusammenfassung mit SHA256-Prüfsumme, Testbefehlen für QEMU/KVM und wichtigen Hinweisen für Endanwender.
-
-📜 Changelog (Der Weg zu v10.7)
-v10.7: Finale Stabilitäts- und Verifizierungs-Checks hinzugefügt.
-
-v10.6: isohdpfx.bin MBR-Template-Suche robust gemacht und filesystem.size für Casper ergänzt.
-
-v10.2 - v10.5: Kritische xorriso-Fehler behoben, die durch fehlende Boot-Dateien und inkompatible Flags verursacht wurden.
-
-v9.8 - v10.1: Das 4-GiB-Dateigrößenlimit von ISO9660 durch einen manuellen xorriso-Aufruf mit automatischer UDF-Unterstützung umgangen.
-
-v9.5 - v9.7: Paketabhängigkeiten korrigiert (lupin-casper entfernt, libkpmcore11 auf libkpmcore13 aktualisiert).
-
-v9.4: Korrekte Konfiguration des AILinux-Spiegelservers für alle Ubuntu- und AILinux-Pakete wiederhergestellt.
-
-v9.0 - v9.3: Anfängliche Fehler im Calamares-Installer (unpackfs-Pfad) und Netzwerkprobleme im Chroot behoben.
-
-v8.x: Basis-Skripte zusammengeführt und grundlegende Funktionalität hergestellt.
+Anpassbar: Das Skript ist durch Variablen und klar getrennte Funktionsblöcke leicht anpassbar.
 
 🚀 Erste Schritte
-Klone das Repository oder lade die build.sh-Datei herunter.
+1. Voraussetzungen (Host-System)
+Stelle sicher, dass dein Host-System (z. B. Ubuntu 24.04) über alle notwendigen Werkzeuge verfügt. Führe dazu folgenden Befehl aus:
 
-Stelle sicher, dass alle Voraussetzungen (siehe Skript-Header) erfüllt sind.
+Bash
 
-(Optional) Platziere deine eigenen Bilder im branding-Verzeichnis.
+sudo apt-get update
+sudo apt-get install debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
+  shim-signed ovmf mtools wget curl gnupg isolinux syslinux-common dosfstools psmisc lsof
+2. Skript ausführen
+Um den Build-Prozess zu starten, mache das Skript ausführbar und führe es aus:
 
-Führe das Skript aus:
+Bash
 
 chmod +x build.sh
 ./build.sh
+Das Skript darf nicht mit sudo oder als root gestartet werden. Es wird bei Bedarf selbstständig nach sudo-Rechten fragen.
 
-Nach Abschluss des Builds findest du die fertige ailinux-24.04-amd64.iso und eine SHA256-Prüfsumme in der finalen Ausgabe.
+3. Notfall-Cleanup
+Sollte der Build-Prozess einmal fehlschlagen und Mount-Punkte oder Verzeichnisse zurücklassen, kannst du die Notfall-Cleanup-Funktion nutzen:
 
-Ein riesiges Dankeschön an alle, die durch Tests und Feedback geholfen haben, diesen Meilenstein zu erreichen!
+Bash
+
+./build.sh --cleanup
+🛠️ Der Build-Prozess im Detail
+Das Skript folgt einem bewährten 12-Schritte-Ablauf, um eine konsistente und funktionale ISO zu gewährleisten.
+
+Schritt	Aktion	Beschreibung
+1	Host vorbereiten	Installiert alle Abhängigkeiten auf dem Build-Rechner.
+2	Verzeichnisstruktur anlegen	Erstellt eine saubere Arbeitsumgebung (AILINUX_BUILD/chroot und AILINUX_BUILD/iso).
+3	Basissystem installieren	Installiert via debootstrap ein Ubuntu-Minimalsystem in das chroot-Verzeichnis.
+4	Netzwerk & Service-Block	Konfiguriert DNS für die Chroot-Umgebung und verhindert den Start von Diensten.
+5	Chroot-Skript erstellen	Generiert dynamisch ein Skript, das alle Operationen innerhalb des Chroots ausführt.
+6	Chroot-Umgebung einrichten	Führt das Chroot-Skript aus: Repositories hinzufügen, Pakete installieren, System
+konfigurieren (Live-User, Autologin, Calamares).
+7	Pseudo-Dateisysteme unmounten	Bereinigt nach dem Chroot alle System-Mounts (/dev, /proc, etc.) sicher.
+8	SquashFS erzeugen	Komprimiert das gesamte chroot-Verzeichnis in die filesystem.squashfs-Datei.
+9	Manifest & Metadaten generieren	Erstellt eine Paketliste (.manifest), die Größen-Info und das .disk/info-Branding.
+10	Bootloader einrichten	Konfiguriert ISOLINUX für BIOS-Boot und GRUB in einem efi.img für UEFI-Boot.
+11	Finale ISO erzeugen	Nutzt xorriso, um alle Komponenten zu einer bootfähigen Hybrid-ISO zusammenzufügen.
+12	Abschluss & Validierung	Setzt den Besitz der ISO-Datei auf den ursprünglichen Benutzer zurück und gibt Größe
+sowie die SHA256-Prüfsumme aus.
+
+In Google Sheets exportieren
+🔧 Calamares-Integration
+Der grafische Installer Calamares wird automatisch in das System integriert:
+
+Installation: Das Paket calamares wird zusammen mit der Desktop-Umgebung installiert.
+
+Desktop-Launcher: Eine .desktop-Datei (install-ailinux.desktop) wird auf dem Desktop des Live-Users platziert, die den Installer mit pkexec calamares startet.
+
+Branding: Das Skript passt die settings.conf von Calamares an, um das Branding ailinux zu verwenden. Eigene Branding-Assets können im Chroot unter /etc/calamares/branding/ailinux/ platziert werden.
+
+Wichtiger Hinweis: Der Build-Prozess erzeugt ein einzelnes filesystem.squashfs, da dies die von Calamares erwartete und am besten unterstützte Methode ist.
+
+📜 Lizenz
+Dieses Projekt steht unter der MIT-Lizenz.
