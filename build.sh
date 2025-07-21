@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v18.3 - Fixed Calamares & Locale Issues)
+# AILinux ISO Build-Skript (v18.5 - Early Mirror Integration)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
@@ -176,11 +176,12 @@ step_03_mount_filesystems() {
 }
 
 step_04_chroot_base_config() {
-    log_step "4/14" "Chroot: Basiskonfiguration & Repositories"
+    log_step "4/14" "Chroot: Basiskonfiguration & AILinux Mirror-Integration"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         echo "ailinux" > /etc/hostname
 
+        # Standard-Ubuntu-Repositories als Fallback definieren
         cat > /etc/apt/sources.list << "SOURCES"
 deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
 deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
@@ -196,8 +197,21 @@ SOURCES
         echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
         locale-gen
         update-locale LANG=en_US.UTF-8
+
+        # --- AILinux Repository & Mirror Integration ---
+        echo "Versuche, das AILinux Repository und den Mirror zu integrieren..."
+        if curl -fssSL --connect-timeout 10 https://ailinux.me:8443/mirror/add-ailinux-repo.sh > /tmp/add-repo.sh; then
+            echo "AILinux Repository-Skript erfolgreich heruntergeladen. Führe es aus..."
+            bash /tmp/add-repo.sh
+            echo "AILinux Repository-Skript ausgeführt. Aktualisiere Paketlisten..."
+            apt-get update
+        else
+            echo "WARNUNG: AILinux Repository-Skript konnte nicht heruntergeladen werden (ailinux.me:8443 nicht erreichbar?)."
+            echo "Fahre mit Standard-Ubuntu-Repositories fort."
+        fi
+        rm -f /tmp/add-repo.sh
 EOF
-    log_success "Basiskonfiguration im Chroot abgeschlossen."
+    log_success "Basiskonfiguration und Mirror-Integration abgeschlossen."
 }
 
 step_05_chroot_kernel_core() {
@@ -681,7 +695,7 @@ step_11_prepare_iso_structure() {
 step_12_create_bootloaders() {
     log_step "12/14" "Bootloader (ISOLINUX & GRUB) erstellen"
     
-    # ISOLINUX für BIOS-Boot
+    # --- ISOLINUX für BIOS-Boot ---
     cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
     cp /usr/lib/syslinux/modules/bios/{ldlinux.c32,libutil.c32,menu.c32} "${ISO_DIR}/isolinux/"
     
@@ -698,7 +712,11 @@ LABEL live
   APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash ---
 EOF
 
-    # GRUB für UEFI-Boot
+    # --- GRUB für UEFI-Boot ---
+    # FIX: Erstelle ein dediziertes efi.img für eine robustere UEFI-Boot-Konfiguration
+    log_info "Erstelle GRUB EFI Boot Image (efi.img)..."
+    
+    # Erstelle die GRUB-Konfigurationsdatei
     cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOF
 set timeout=5
 set default="0"
@@ -709,19 +727,29 @@ menuentry "Try or Install ${DISTRO_NAME}" {
 }
 EOF
     
-    mkdir -p "${ISO_DIR}/EFI/BOOT"
+    # Erstelle das efi.img als FAT32-Image
+    local efi_img_size=64 # 64MB sollten ausreichen
+    dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1M count=${efi_img_size} status=none
+    mkfs.vfat -n "AILINUX_EFI" "${ISO_DIR}/boot/grub/efi.img" > /dev/null
     
-    # Erstelle ein eigenständiges GRUB-EFI-Image
+    # Erstelle ein eigenständiges GRUB-EFI-Binary
     grub-mkstandalone \
         --format=x86_64-efi \
-        --output="${ISO_DIR}/boot/grub/bootx64.efi" \
+        --output="/tmp/bootx64.efi" \
         --locales="" --fonts="" \
         "boot/grub/grub.cfg=${ISO_DIR}/boot/grub/grub.cfg"
 
-    # Kopiere das signierte Shim für Secure Boot und das GRUB-Image
-    cp /usr/lib/shim/shimx64.efi.signed "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
-    cp "${ISO_DIR}/boot/grub/bootx64.efi" "${ISO_DIR}/EFI/BOOT/grubx64.efi"
-    
+    # Mounte das efi.img und kopiere die Bootloader-Dateien hinein
+    local efi_mount
+    efi_mount=$(mktemp -d)
+    sudo mount -o loop "${ISO_DIR}/boot/grub/efi.img" "${efi_mount}"
+    sudo mkdir -p "${efi_mount}/EFI/BOOT"
+    sudo cp /tmp/bootx64.efi "${efi_mount}/EFI/BOOT/grubx64.efi"
+    sudo cp /usr/lib/shim/shimx64.efi.signed "${efi_mount}/EFI/BOOT/BOOTX64.EFI"
+    sudo umount "${efi_mount}"
+    rmdir "${efi_mount}"
+    rm /tmp/bootx64.efi
+
     log_success "Bootloader-Konfigurationen erstellt."
 }
 
@@ -730,6 +758,7 @@ step_13_create_iso() {
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
+    # FIX: Verwende die explizit erstellte efi.img für den UEFI-Boot
     sudo xorriso -as mkisofs \
         -o "${BUILD_DIR}/${ISO_NAME}" \
         -V "${volume_id}" \
@@ -741,10 +770,10 @@ step_13_create_iso() {
         -boot-load-size 4 \
         -boot-info-table \
         -eltorito-alt-boot \
-        -e --interval:appended_partition_2:all:: \
+        -e boot/grub/efi.img \
         -no-emul-boot \
-        -isohybrid-gpt-basdat \
         -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -isohybrid-gpt-basdat \
         "${ISO_DIR}"
 
     sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}"
@@ -793,7 +822,7 @@ main() {
     start_time=$(date +%s)
     
     echo ""
-    log_info "==================== AILinux ISO Build v18.3 ===================="
+    log_info "==================== AILinux ISO Build v18.5 ===================="
     
     step_01_setup_environment
     step_02_debootstrap
