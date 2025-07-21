@@ -221,9 +221,8 @@ EOF
         apt-get update
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release
 
-        # KORREKTUR: 'log_info' wurde durch 'echo' ersetzt, da die log_info-Funktion
-        # innerhalb der chroot-Umgebung nicht verfügbar ist.
-        echo 'Adding AILinux custom repository...'
+        # Add AILinux repository (this script will also handle external repos like Chrome, Wine, etc.)
+        echo 'Adding AILinux custom repository and other external sources...'
         curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
         
         # Setup locales
@@ -231,21 +230,15 @@ EOF
         locale-gen
         update-locale LANG=en_US.UTF-8
         
-        # Add i386 architecture for Wine
+        # The i386 architecture is now handled by the add-ailinux-repo.sh script.
+        # We only need to run the command, the script takes care of the rest.
         dpkg --add-architecture i386
         
-        # Add Chrome repository
-        wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-chrome.gpg
-        echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main' > /etc/apt/sources.list.d/google-chrome.list
+        # KORREKTUR: Die folgenden Repository-Definitionen wurden entfernt.
+        # Das Skript 'add-ailinux-repo.sh' übernimmt diese Aufgabe, wodurch
+        # der Konflikt bei den GPG-Schlüsseln ('Signed-By') behoben wird.
         
-        # Add Wine repository
-        wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor > /usr/share/keyrings/winehq.gpg
-        echo 'deb [arch=amd64,i386 signed-by=/usr/share/keyrings/winehq.gpg] https://dl.winehq.org/wine-builds/ubuntu/ ${UBUNTU_CODENAME} main' > /etc/apt/sources.list.d/winehq.list
-        
-        # Add VS Code repository
-        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/packages.microsoft.gpg
-        echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' > /etc/apt/sources.list.d/vscode.list
-        
+        # Final update to fetch all package lists from all configured sources
         apt-get update
     "
     log_success "Base system and repositories configured."
