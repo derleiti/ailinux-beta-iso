@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.2 - 4GiB ISO Fix)
+# AILinux ISO Build-Skript (v17.3 - Final ISO Fix)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # und den Spezifikationen in prompt.txt.
 #
@@ -488,12 +488,11 @@ step_12_create_iso() {
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
-    # KORREKTUR: Flags für >4GiB Dateien hinzugefügt
+    # KORREKTUR: Standard-Flags für große Dateien verwenden
     sudo xorriso -as mkisofs \
         -r -V "${volume_id}" \
         -o "${BUILD_DIR}/${ISO_NAME}" \
-        -iso-level 3 \
-        -allow-limited-size \
+        -J -joliet-long -l \
         --grub2-mbr /usr/lib/grub/i386-pc/boot_hybrid.img \
         -partition_offset 16 \
         --mbr-force-bootable \
