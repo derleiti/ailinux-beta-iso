@@ -84,9 +84,9 @@ ai_debugger() {
 
     local json_payload
     json_payload=$(jq -n \
-                  --arg sp "$system_prompt" \
-                  --arg lc "$log_content" \
-                  '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}')
+                   --arg sp "$system_prompt" \
+                   --arg lc "$log_content" \
+                   '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}')
 
     log_ai "Performing analysis... This may take a moment."
     
@@ -195,7 +195,11 @@ step_02_bootstrap_system() {
     log_step "2/10" "Bootstrap Base System and Configure Repositories"
     
     log_info "Running debootstrap to create base system..."
-    sudo debootstrap --arch="${ARCHITECTURE}" --variant=standard "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
+    # KORREKTUR: "--variant=standard" wurde durch "--variant=minbase" ersetzt.
+    # "standard" ist keine gültige debootstrap-Variante. "minbase" erstellt
+    # ein minimales Basissystem, das die korrekte Grundlage für eine
+    # benutzerdefinierte Distribution ist.
+    sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     
     # Setup mounts for chroot
     sudo mount --bind /dev "${CHROOT_DIR}/dev"
@@ -326,7 +330,7 @@ When a user provides you with an error log or a problem description, you MUST re
 ### 🚨 Problem Summary
 A brief, one-sentence summary of the core issue.
 
-### ⚙️ Likely Cause
+### ⚙ Likely Cause
 Your detailed analysis of the root cause of the error or problem. Explain the technical details clearly.
 
 ### ✅ Suggested Solution
@@ -379,7 +383,7 @@ def main():
     helper = AILinuxHelper()
     
     if args.sysinfo:
-        print('### 🖥️ System Information')
+        print('### 🖥 System Information')
         print(helper.get_system_info())
         return
     
@@ -668,7 +672,7 @@ step_08_create_squashfs() {
     sudo cp "${CHROOT_DIR}"/boot/initrd.img-*-generic "${ISO_DIR}/casper/initrd"
     
     # Create package manifest
-    run_in_chroot "dpkg-query -W --showformat='\${Package}\t\${Version}\n'" > "${ISO_DIR}/casper/filesystem.manifest"
+    run_in_chroot "dpkg-query -W --showformat='\\\${Package}\t\\\${Version}\n'" > "${ISO_DIR}/casper/filesystem.manifest"
     
     log_info "Creating SquashFS image with zstd compression (this may take a while)..."
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" \
