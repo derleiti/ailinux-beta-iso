@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v18.1 - Enhanced with AI Components Integration & Safer Finalization)
+# AILinux ISO Build-Skript (v18.2 - Fixed Wine Dependencies & Modernized Keys)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
@@ -221,21 +221,30 @@ step_06_chroot_desktop() {
         set -e
         export DEBIAN_FRONTEND=noninteractive
         
-        # Externe Repositories hinzufügen
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
-        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-
-        mkdir -p /etc/apt/keyrings
-        wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
-        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/winehq-archive.key] https://dl.winehq.org/wine-builds/ubuntu/ noble main" > /etc/apt/sources.list.d/winehq.list
-
-        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg
-        echo "deb [arch=amd64] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
+        # FIX: i386-Architektur für Wine hinzufügen
+        dpkg --add-architecture i386
         
+        # Externe Repositories und Schlüssel korrekt hinzufügen
+        mkdir -p /etc/apt/keyrings
+        
+        # Google Chrome
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+
+        # WineHQ
+        wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+        echo "deb [arch=amd64,i386 signed-by=/etc/apt/keyrings/winehq-archive.key] https://dl.winehq.org/wine-builds/ubuntu/ noble main" > /etc/apt/sources.list.d/winehq.list
+
+        # VS Code
+        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/keyrings/vscode.gpg
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/vscode.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
+        
+        # Wichtig: APT-Update NACH dem Hinzufügen der Architektur und Repos
         apt-get update
         
         # Desktop-Komponenten installieren
-        apt-get install -y --no-install-recommends \
+        # --install-recommends wird für wine benötigt
+        apt-get install -y --install-recommends \
             kde-full plasma-desktop sddm-theme-breeze xorg \
             firefox thunderbird vlc gimp libreoffice gparted htop neofetch \
             ubuntu-restricted-extras ffmpeg pulseaudio \
@@ -684,7 +693,7 @@ main() {
     start_time=$(date +%s)
     
     echo ""
-    log_info "==================== AILinux ISO Build v18.1 ===================="
+    log_info "==================== AILinux ISO Build v18.2 ===================="
     
     step_01_setup_environment
     step_02_debootstrap
