@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v18.2 - Fixed Wine Dependencies & Modernized Keys)
+# AILinux ISO Build-Skript (v18.3 - Fixed Calamares & Locale Issues)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
@@ -205,6 +205,8 @@ step_05_chroot_kernel_core() {
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         apt-get install -y --no-install-recommends \
             linux-image-generic linux-headers-generic casper \
             discover laptop-detect os-prober network-manager \
@@ -220,6 +222,8 @@ step_06_chroot_desktop() {
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         
         # FIX: i386-Architektur für Wine hinzufügen
         dpkg --add-architecture i386
@@ -273,6 +277,8 @@ step_07_chroot_ai_components() {
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         
         echo "[CHROOT-AI] Installiere Python-Abhängigkeiten für AILinux..."
         python3 -m pip install --break-system-packages requests openai python-dotenv psutil
@@ -424,12 +430,51 @@ step_08_chroot_calamares() {
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         
-        apt-get install -y calamares calamares-settings-ubuntu imagemagick
+        # FIX: calamares-settings-ubuntu existiert nicht in Noble 24.04.
+        # Installiere nur calamares und benötigte Python-Module und konfiguriere es manuell.
+        apt-get install -y calamares python3-pyqt5 python3-yaml python3-parted imagemagick
         
-        # Basis-Branding erstellen
+        # Erstelle Calamares Konfigurationsverzeichnisse
+        mkdir -p /etc/calamares/modules
+        
+        # --- Erstelle eine vollständige settings.conf ---
+        cat > /etc/calamares/settings.conf << "SETTINGS"
+modules-search: [ local, /usr/share/calamares/modules ]
+branding: ailinux
+sequence:
+  - show:
+      - welcome
+      - locale
+      - keyboard
+      - partition
+      - users
+      - summary
+  - exec:
+      - partition
+      - mount
+      - unpackfs
+      - machineid
+      - fstab
+      - locale
+      - keyboard
+      - localecfg
+      - users
+      - displaymanager
+      - networkcfg
+      - hwclock
+      - services-systemd
+      - bootloader
+      - postinstall
+      - umount
+- show:
+    - finished
+SETTINGS
+
+        # --- Branding (wie bisher) ---
         mkdir -p /etc/calamares/branding/ailinux
-        
         if [ -d "/tmp/branding" ] && [ -f "/tmp/branding/product.png" ]; then
             cp /tmp/branding/product.png /etc/calamares/branding/ailinux/logo.png
         else
@@ -455,10 +500,58 @@ style:
     SidebarTextSelect:   "#3498db"
 BRANDING
 
-        # Calamares Konfiguration anpassen
-        sed -i 's/branding: default/branding: ailinux/' /etc/calamares/settings.conf
+        # --- Modulkonfigurationen ---
         
-        # Post-Installations-Skript für AI-Helper
+        cat > /etc/calamares/modules/welcome.conf << "WELCOME"
+---
+require-online: false
+WELCOME
+
+        cat > /etc/calamares/modules/partition.conf << "PARTITION"
+---
+default-filesystem: "ext4"
+PARTITION
+
+        cat > /etc/calamares/modules/users.conf << "USERS"
+---
+default_groups:
+    - "adm"
+    - "cdrom"
+    - "sudo"
+    - "dip"
+    - "plugdev"
+    - "lpadmin"
+    - "audio"
+    - "video"
+default-shell: "/bin/bash"
+setRootPassword: true
+reuseUserPasswordForRoot: true
+USERS
+
+        cat > /etc/calamares/modules/unpackfs.conf << "UNPACKFS"
+---
+unpack:
+    - source: "/run/live/medium/casper/filesystem.squashfs"
+      sourcefs: "squashfs"
+      destination: ""
+UNPACKFS
+
+        cat > /etc/calamares/modules/bootloader.conf << "BOOTLOADER"
+---
+installBootloader: true
+bootloader: "grub"
+grubInstall: "efi"
+efiBootloaderId: "AILinux"
+BOOTLOADER
+
+        cat > /etc/calamares/modules/displaymanager.conf << "DISPLAYMANAGER"
+---
+displaymanagers:
+    - name: sddm
+      displaymanager_path: "/usr/bin/sddm"
+      service: "sddm.service"
+DISPLAYMANAGER
+
         cat > /etc/calamares/modules/postinstall.conf << "POSTINSTALL"
 script:
     - |
@@ -466,16 +559,21 @@ script:
       # AILinux Post-Installation Konfiguration
       
       # Aktiviere AILinux Willkommensnachricht für alle neuen Benutzer
-      echo 'echo -e "\n🤖 AILinux Helper verfügbar! Verwende '\''aihelp'\'' für KI-gestützte Systemhilfe.\n"' >> /etc/bash.bashrc
+      echo 'echo -e "\n🤖 AILinux Helper verfügbar! Verwende '\''aihelp'\'' für KI-gestützte Systemhilfe.\n"' >> /target/etc/bash.bashrc
 POSTINSTALL
+
+        # Bereinige temporäre Dateien
+        rm -rf /tmp/branding
 EOF
-    log_success "Calamares Installer konfiguriert."
+    log_success "Calamares Installer vollständig konfiguriert."
 }
 
 step_09_chroot_user_setup() {
     log_step "9/14" "Chroot: Live-Benutzer und Desktop anpassen"
     sudo chroot "${CHROOT_DIR}" /bin/bash -c "export LIVE_USER=${LIVE_USER}" <<'EOF'
         set -e
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         useradd -s /bin/bash -d "/home/${LIVE_USER}" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video "${LIVE_USER}"
         passwd -d "${LIVE_USER}"
         
@@ -543,6 +641,8 @@ step_10_chroot_cleanup() {
     
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
+        export LANG=en_US.UTF-8
+        export LC_ALL=en_US.UTF-8
         apt-get autoremove -y --purge
         apt-get clean
         rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
@@ -693,7 +793,7 @@ main() {
     start_time=$(date +%s)
     
     echo ""
-    log_info "==================== AILinux ISO Build v18.2 ===================="
+    log_info "==================== AILinux ISO Build v18.3 ===================="
     
     step_01_setup_environment
     step_02_debootstrap
