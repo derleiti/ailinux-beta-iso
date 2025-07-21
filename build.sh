@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.0 - Generiert aus GitHub Repo)
+# AILinux ISO Build-Skript (v17.1 - Chroot & Dependency Fix)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # und den Spezifikationen in prompt.txt.
 #
@@ -195,15 +195,13 @@ step_06_chroot_desktop() {
         
         log_info() { echo "[CHROOT-INFO] $1"; }
         
-        log_info "Installiere KDE Plasma Desktop (vollständig)..."
-        apt-get install -y kde-full plasma-desktop sddm-theme-breeze xorg
-        
-        log_info "Installiere Standard-Anwendungen..."
-        apt-get install -y --no-install-recommends \
-            firefox thunderbird vlc gimp libreoffice gparted htop neofetch
-        
-        log_info "Installiere Multimedia-Codecs..."
-        apt-get install -y --no-install-recommends ubuntu-restricted-extras ffmpeg pulseaudio
+        # --- KORREKTUR: Service-Starts simulieren, um Fehler zu vermeiden ---
+        log_info "Simuliere Systemdienste für die Installation..."
+        cat > /usr/sbin/invoke-rc.d << "INVOKE_RC_D_STUB"
+#!/bin/sh
+exit 0
+INVOKE_RC_D_STUB
+        chmod +x /usr/sbin/invoke-rc.d
         
         log_info "Konfiguriere externe Repositories..."
         wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
@@ -218,24 +216,53 @@ step_06_chroot_desktop() {
         
         apt-get update
         
-        log_info "Installiere Anwendungen aus externen Repos..."
-        apt-get install -y --no-install-recommends google-chrome-stable || log_info "Google Chrome Installation fehlgeschlagen."
-        apt-get install -y --no-install-recommends winehq-staging winetricks || { log_info "WineHQ Installation fehlgeschlagen, versuche Standard-Repo..."; apt-get install -y --no-install-recommends wine winetricks; }
-        apt-get install -y --no-install-recommends code || log_info "VS Code Installation fehlgeschlagen."
-
-        log_info "Installiere Entwicklerwerkzeuge..."
-        apt-get install -y --no-install-recommends git build-essential python3 python3-pip nodejs default-jdk
+        log_info "Installiere alle Desktop-Komponenten in einem Schritt..."
         
-        log_info "Installiere Hardware-Support..."
-        apt-get install -y --no-install-recommends \
-            linux-firmware bluez bluetooth wireless-tools wpasupplicant \
-            printer-driver-all cups
+        # KORREKTUR: Alle Pakete in einem Befehl installieren und Abhängigkeiten explizit auflösen
+        apt-get install -y \
+            systemd-coredump \
+            kde-full \
+            plasma-desktop \
+            sddm-theme-breeze \
+            xorg \
+            firefox \
+            thunderbird \
+            vlc \
+            gimp \
+            libreoffice \
+            gparted \
+            htop \
+            neofetch \
+            ubuntu-restricted-extras \
+            ffmpeg \
+            pulseaudio \
+            google-chrome-stable \
+            winehq-staging \
+            winetricks \
+            code \
+            git \
+            build-essential \
+            python3 \
+            python3-pip \
+            nodejs \
+            default-jdk \
+            linux-firmware \
+            bluez \
+            bluetooth \
+            wireless-tools \
+            wpasupplicant \
+            printer-driver-all \
+            cups
             
         log_info "Aktiviere wichtige Systemdienste..."
         systemctl enable bluetooth || true
         systemctl enable cups || true
         systemctl enable NetworkManager || true
         systemctl enable sddm || true
+
+        # --- KORREKTUR: Service-Simulation entfernen ---
+        log_info "Entferne Service-Simulation..."
+        rm /usr/sbin/invoke-rc.d
 EOF
     log_success "Desktop und Premium-Anwendungen installiert."
 }
