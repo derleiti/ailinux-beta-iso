@@ -1,28 +1,11 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v16.6 - Final mit Calamares & KDE Fix)
-# Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat).
+# AILinux ISO Build-Skript (v17.0 - Generiert aus GitHub Repo)
+# Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
+# und den Spezifikationen in prompt.txt.
 #
 # Lizenz: MIT License
 # Copyright (c) 2024 derleiti
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
 
 # Strikter Fehlermodus: Bricht bei Fehlern, nicht gesetzten Variablen und Fehlern in Pipelines ab.
 set -eo pipefail
@@ -40,7 +23,7 @@ LIVE_HOSTNAME="ailinux"
 BUILD_DIR="AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
-ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-premium-${ARCHITECTURE}.iso"
+ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-${DISTRO_EDITION,,}-${ARCHITECTURE}.iso"
 
 # --- Farb- und Logging-Funktionen ---
 COLOR_RESET='\033[0m'
@@ -71,22 +54,15 @@ check_not_root() {
     fi
 }
 
-safe_umount() {
-    if mountpoint -q "$1"; then
-        log_info "Unmounte '$1'..."
-        sudo umount -f -l "$1" || log_warn "Konnte '$1' nicht unmounten."
-    fi
-}
-
 cleanup() {
     log_warn "Starte Bereinigung des Build-Verzeichnisses..."
     set +e # Fehler während der Bereinigung ignorieren
 
-    safe_umount "${CHROOT_DIR}/run"
-    safe_umount "${CHROOT_DIR}/sys"
-    safe_umount "${CHROOT_DIR}/proc"
-    safe_umount "${CHROOT_DIR}/dev/pts"
-    safe_umount "${CHROOT_DIR}/dev"
+    if mountpoint -q "${CHROOT_DIR}/run"; then sudo umount -f -l "${CHROOT_DIR}/run"; fi
+    if mountpoint -q "${CHROOT_DIR}/sys"; then sudo umount -f -l "${CHROOT_DIR}/sys"; fi
+    if mountpoint -q "${CHROOT_DIR}/proc"; then sudo umount -f -l "${CHROOT_DIR}/proc"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev/pts"; then sudo umount -f -l "${CHROOT_DIR}/dev/pts"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev"; then sudo umount -f -l "${CHROOT_DIR}/dev"; fi
 
     log_info "Entferne Build-Verzeichnis: ${BUILD_DIR}"
     sudo rm -rf "${BUILD_DIR}"
@@ -210,7 +186,7 @@ EOF
 }
 
 step_06_chroot_desktop() {
-    log_step "6/12" "Chroot: KDE Plasma Desktop und Premium-Anwendungen installieren"
+    log_step "6/12" "Chroot: Desktop und Premium-Anwendungen installieren"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
@@ -220,14 +196,11 @@ step_06_chroot_desktop() {
         log_info() { echo "[CHROOT-INFO] $1"; }
         
         log_info "Installiere KDE Plasma Desktop (vollständig)..."
-        # KORREKTUR: --no-install-recommends entfernt für eine vollständige Installation
-        apt-get install -y \
-            kde-full plasma-desktop sddm-theme-breeze xorg
+        apt-get install -y kde-full plasma-desktop sddm-theme-breeze xorg
         
         log_info "Installiere Standard-Anwendungen..."
         apt-get install -y --no-install-recommends \
-            firefox thunderbird vlc gimp libreoffice \
-            gparted htop neofetch
+            firefox thunderbird vlc gimp libreoffice gparted htop neofetch
         
         log_info "Installiere Multimedia-Codecs..."
         apt-get install -y --no-install-recommends ubuntu-restricted-extras ffmpeg pulseaudio
@@ -245,10 +218,13 @@ step_06_chroot_desktop() {
         
         apt-get update
         
-        log_info "Installiere Google Chrome, Wine und VS Code..."
-        apt-get install -y --no-install-recommends google-chrome-stable || log_info "Google Chrome Installation fehlgeschlagen, überspringe..."
+        log_info "Installiere Anwendungen aus externen Repos..."
+        apt-get install -y --no-install-recommends google-chrome-stable || log_info "Google Chrome Installation fehlgeschlagen."
         apt-get install -y --no-install-recommends winehq-staging winetricks || { log_info "WineHQ Installation fehlgeschlagen, versuche Standard-Repo..."; apt-get install -y --no-install-recommends wine winetricks; }
-        apt-get install -y --no-install-recommends code || log_info "VS Code Installation fehlgeschlagen, überspringe..."
+        apt-get install -y --no-install-recommends code || log_info "VS Code Installation fehlgeschlagen."
+
+        log_info "Installiere Entwicklerwerkzeuge..."
+        apt-get install -y --no-install-recommends git build-essential python3 python3-pip nodejs default-jdk
         
         log_info "Installiere Hardware-Support..."
         apt-get install -y --no-install-recommends \
@@ -261,7 +237,7 @@ step_06_chroot_desktop() {
         systemctl enable NetworkManager || true
         systemctl enable sddm || true
 EOF
-    log_success "KDE Plasma Desktop und Premium-Anwendungen installiert."
+    log_success "Desktop und Premium-Anwendungen installiert."
 }
 
 step_07_chroot_calamares() {
@@ -272,8 +248,6 @@ step_07_chroot_calamares() {
         export LANG=en_US.UTF-8
         
         apt-get install -y calamares imagemagick
-        
-        # --- KORREKTUR: Vollständige Calamares-Konfiguration erstellen ---
         
         # 1. settings.conf mit korrekter Sequenz
         mkdir -p /etc/calamares
@@ -345,7 +319,7 @@ EOF
 }
 
 step_08_chroot_user_setup() {
-    log_step "8/12" "Chroot: Live-Benutzer einrichten"
+    log_step "8/12" "Chroot: Live-Benutzer und Desktop anpassen"
     sudo chroot "${CHROOT_DIR}" /bin/bash -c "export LIVE_USER=${LIVE_USER}" <<'EOF'
         set -e
         useradd -s /bin/bash -d "/home/${LIVE_USER}" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video "${LIVE_USER}"
@@ -361,8 +335,10 @@ Session=plasma
 Relogin=false
 AUTOLOGIN_CONF
 
+        # Desktop-Verzeichnisse erstellen
         mkdir -p "/home/${LIVE_USER}/Desktop"
-        # KORREKTUR: Deutsche Übersetzung hinzugefügt
+        
+        # Calamares Installer-Verknüpfung
         cat > "/home/${LIVE_USER}/Desktop/Install AILinux.desktop" << DESKTOP_FILE
 [Desktop Entry]
 Name=Install AILinux
@@ -375,11 +351,29 @@ Terminal=false
 Type=Application
 Categories=System;
 DESKTOP_FILE
-        chmod +x "/home/${LIVE_USER}/Desktop/Install AILinux.desktop"
+
+        # Andere Anwendungs-Verknüpfungen
+        ln -s /usr/share/applications/org.kde.konsole.desktop "/home/${LIVE_USER}/Desktop/"
+        ln -s /usr/share/applications/firefox.desktop "/home/${LIVE_USER}/Desktop/"
+        ln -s /usr/share/applications/google-chrome.desktop "/home/${LIVE_USER}/Desktop/"
+
+        # .bashrc mit Willkommensnachricht anpassen
+        cat >> "/home/${LIVE_USER}/.bashrc" << 'BASHRC_CUSTOM'
+
+# AILinux Welcome Message
+echo ""
+echo "############################################################"
+echo "### Welcome to AILinux 24.04 Premium Edition             ###"
+echo "############################################################"
+echo ""
+echo "To install, use the 'Install AILinux' icon on the desktop."
+echo ""
+BASHRC_CUSTOM
         
+        chmod +x "/home/${LIVE_USER}/Desktop/"*.desktop
         chown -R "${LIVE_USER}":"${LIVE_USER}" "/home/${LIVE_USER}"
 EOF
-    log_success "Live-Benutzer eingerichtet."
+    log_success "Live-Benutzer und Desktop angepasst."
 }
 
 step_09_chroot_cleanup() {
@@ -401,10 +395,10 @@ EOF
 step_10_prepare_iso_structure() {
     log_step "10/12" "ISO-Struktur vorbereiten und SquashFS erstellen"
     
-    safe_umount "${CHROOT_DIR}/sys"
-    safe_umount "${CHROOT_DIR}/proc"
-    safe_umount "${CHROOT_DIR}/dev/pts"
-    safe_umount "${CHROOT_DIR}/dev"
+    if mountpoint -q "${CHROOT_DIR}/sys"; then sudo umount -l "${CHROOT_DIR}/sys"; fi
+    if mountpoint -q "${CHROOT_DIR}/proc"; then sudo umount -l "${CHROOT_DIR}/proc"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev/pts"; then sudo umount -l "${CHROOT_DIR}/dev/pts"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev"; then sudo umount -l "${CHROOT_DIR}/dev"; fi
     
     mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub,.disk}
     
@@ -496,7 +490,7 @@ main() {
     
     if [ "$1" == "--cleanup" ]; then
         log_warn "Manuelle Bereinigung angefordert."
-        ./cleanup.sh # Ruft das externe Skript auf, falls vorhanden
+        cleanup
         exit 0
     fi
     
