@@ -1,41 +1,79 @@
-mache das script endgültig funktionsbereit nutze den beispielcode aus build.sh. lies die README.md was beabsichtigt ist und gehe nach folgendem prompt vor.
+Allgemeine Anforderungen
 
-✅ **Prompt zur Reproduktion des AILinux ISO Build-Skripts (v16.0)**
-**Aufgabe:** Erstelle ein vollständiges, robustes Bash-Skript (`build.sh`) zum Erzeugen einer bootfähigen Live-ISO für eine eigene Linux-Distribution namens **AILinux**, basierend auf **Ubuntu 24.04 (noble)**.
-Das Skript soll **keine Root-Ausführung** benötigen, aber bei Bedarf `sudo` verwenden. Es richtet automatisch alle Build-Schritte ein, inklusive Live-System, KDE Desktop, Calamares Installer und UEFI/BIOS Bootloader.
-Bitte achte auf klare Logging-Ausgaben, Fehlerbehandlung, ein sicheres Mount-/Unmount-System und saubere Strukturierung in 12 Schritten.
-📦 **Technische Anforderungen:**
-1. **Zielplattform:** Debian-/Ubuntu-basiertes Host-System (z. B. Ubuntu 24.04)
-2. **ISO-Erzeugung:**
-   * debootstrap-basiertes Chroot-System
-   * vollständiges Root-Filesystem als `filesystem.squashfs`
-   * **Calamares**-Integration (Installer im Live-System)
-   * Hybrid-Boot: **ISOLINUX** (BIOS) + **GRUB/EFI** (UEFI)
-   * Live-Nutzer `ailinux`, Autologin mit `sddm`, Session `plasma-x11.desktop`
-3. **Feature-Übersicht:**
-   * Automatisierter **12-Schritte-Prozess**
-   * ISO enthält KDE Desktop + Apps (Firefox, VLC, LibreOffice etc.)
-   * Calamares wird per `.desktop`-Launcher auf dem Live-Desktop gestartet
-   * Calamares-Branding konfigurierbar (`/etc/calamares/settings.conf`)
-   * Sichere, mehrfache Mount- und Umount-Versuche (`safe_mount`, `safe_umount`)
-   * Notfall-Option `./build.sh --cleanup` entfernt chroot-Reste
-   * Erzeugte ISO wird auf Original-User rückübertragen und gehasht
-4. **Verwendete Tools:**
-   * `debootstrap`, `xorriso`, `mksquashfs`, `grub-pc-bin`, `grub-efi-amd64-bin`
-   * `shim-signed`, `ovmf`, `isolinux`, `syslinux-common`
-   * `calamares`, `plymouth`, `network-manager`, `casper`, `ubuntu-standard`
-🖼️ **Besonderheiten:**
-* Das Skript verwendet ein **externes Setup-Skript** (`add-ailinux-repo.sh`), das alle Repositories, GPG-Keys und Branding konfiguriert.
-* Es generiert eine vollständige Arbeitsstruktur im Ordner `AILINUX_BUILD/` mit Unterordnern `chroot/` und `iso/`.
-* Die ISO enthält **ein einzelnes SquashFS-Dateisystem** – wichtig für die Kompatibilität mit Calamares.
-* Die `.desktop`-Datei für Calamares wird im Live-Homeverzeichnis (`/home/ailinux/Desktop/`) abgelegt.
-* Das Branding wird in `/etc/calamares/settings.conf` auf `ailinux` gesetzt.
-* Logging erfolgt mit farbigen Ausgaben, inkl. Zeitstempel (`[INFO]`, `[WARNING]`, `[ERROR]` usw.).
-🧪 **Erwartete Ausgaben:**
-* Eine ISO-Datei mit dem Namen `ailinux-24.04-amd64.iso` (oder Zeitstempel)
-* SHA256-Hash und Größe der ISO am Ende
-* Möglichkeit zur Validierung und Wiederverwendung auf anderen Systemen
-📜 **Lizenz:**
-Das resultierende Skript soll unter der **MIT-Lizenz** stehen.
-💬 **Beispiel für die Aufforderung an ein Modell:**
-Erstelle auf Grundlage dieser Anforderungen ein vollständiges Bash-Skript (`build.sh`) mit allen 12 Schritten wie oben beschrieben, inklusive Calamares-Integration, Desktop-Launcher, Branding-Support, Pseudo-Dateisystem-Mounts, Cleanup-Funktionalität und ISO-Erstellung. Verwende best practices aus der Debian- und Ubuntu-Live-Umgebung und achte auf Wiederholbarkeit und Fehlerrobustheit.
+Strikte Fehlerbehandlung (set -eo pipefail).
+
+Saubere Struktur und Modularität durch klar definierte Funktionen für jeden Schritt.
+
+Detaillierte Logging-Funktion mit farbiger Ausgabe (INFO, SUCCESS, WARNING, ERROR, STEP).
+
+Skript darf nicht als root ausgeführt werden, sondern verwendet sudo bei Bedarf.
+
+Build-Umgebung
+
+Prüfen und automatisches Installieren der nötigen Abhängigkeiten: debootstrap, squashfs-tools, xorriso, grub-pc-bin, grub-efi-amd64-bin, mtools, dosfstools, isolinux, syslinux-common, shim-signed, gnupg.
+
+Automatisierte Einrichtung und Bereinigung der Build-Verzeichnisse.
+
+Chroot-Konfiguration
+
+Erstellung eines minimalen Ubuntu-Basissystems via debootstrap.
+
+Automatisches Einhängen der notwendigen Dateisysteme (proc, sys, dev, dev/pts).
+
+Einrichtung des Hostnamens, Locales und Spracheinstellungen (en_US.UTF-8).
+
+Hinzufügen eines benutzerdefinierten Repositorys und Wechsel zu einem benutzerdefinierten Ubuntu-Mirror.
+
+Kernel- und Core-Systeminstallation
+
+Installiere Linux-Kernel und Basis-Systemkomponenten (linux-image-generic, casper, network-manager, etc.).
+
+Installiere Plymouth-Boot-Animation und systemd als init-System.
+
+Desktop-Umgebung und Anwendungen
+
+Vollständige KDE-Plasma-Desktop-Installation (kde-full, plasma-desktop, sddm).
+
+Standard- und Premium-Anwendungen (Firefox, Thunderbird, VLC, GIMP, LibreOffice, VS Code, Wine, Google Chrome).
+
+Einrichtung externer Repositories (Google Chrome, WineHQ, Microsoft VS Code).
+
+Multimedia-Codecs und Hardware-Support (Bluetooth, Wireless, Printer-Treiber).
+
+Calamares Installer
+
+Vollständige Installation und Konfiguration von Calamares.
+
+Eigenes Branding mit Logo und benutzerdefinierter settings.conf sowie branding.desc.
+
+Konfiguration der Module unpackfs, users, und bootloader für eine reibungslose Installation auf Zielsystemen.
+
+Benutzerverwaltung
+
+Erstelle einen Live-Benutzer („ailinux“), automatisches Login über SDDM.
+
+Desktop-Verknüpfung zur direkten Installation mittels Calamares.
+
+Systembereinigung und ISO-Vorbereitung
+
+Bereinige Chroot-System (APT-Cache, temporäre Dateien, Logs, Maschinen-IDs).
+
+Erstelle SquashFS-Dateisystem mit zstd-Kompression.
+
+Erstelle Bootloader-Konfigurationen für ISOLINUX (BIOS) und GRUB (UEFI).
+
+Finale ISO-Erstellung
+
+Erstelle finale ISO-Datei mittels xorriso inklusive EFI-Support und Hybrid-Boot (BIOS und UEFI).
+
+Generiere SHA256-Hash der ISO-Datei zur Verifikation.
+
+Skriptausführung
+
+Ausführliche Statusausgaben bei jedem Schritt.
+
+Finale automatische Bereinigung nach erfolgreichem Build.
+
+Zeitmessung der Gesamtdauer des Builds mit Ausgabe der fertigen ISO und Dauer.
+
+Bitte verwende eine identische Struktur, Modularität und klare Dokumentation wie in dem zur Verfügung gestellten Beispiel-Skript.
