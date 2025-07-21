@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.7
+# AILinux ISO Build Script v16.8
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now includes the 'gnupg' package
-# to ensure GPG keys can be imported by external scripts.
+# based on Ubuntu 24.04 (noble). It now includes 'wget' to the
+# prerequisite packages for external repository scripts.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -240,8 +240,8 @@ EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-# FIX: Added gnupg for GPG key import
-apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg
+# FIX: Added wget for external scripts
+apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget
 
 # Add AILinux repository
 echo "Füge AILinux Repository hinzu..."
