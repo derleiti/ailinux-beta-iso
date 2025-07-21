@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v16.9
+# AILinux ISO Build Script v17.0
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It removes the deprecated 'lupin-casper'
-# package to fix installation errors on newer Ubuntu bases.
+# based on Ubuntu 24.04 (noble). It now uses the 'kde-full' metapackage
+# for a more robust and complete KDE Plasma installation.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -117,7 +117,6 @@ safe_mount() {
     local delay=2
 
     for ((i=1; i<=attempts; i++)); do
-        # FIX: Removed quotes around ${options} to allow for word splitting (e.g., for "-t proc")
         if sudo mount ${options} "${source}" "${target}"; then
             log_info "Mount erfolgreich: ${target}"
             return 0
@@ -240,7 +239,6 @@ EOL
 
 # Install prerequisites for adding repo (curl, etc.)
 apt-get update
-# FIX: Added wget for external scripts
 apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget
 
 # Add AILinux repository
@@ -263,7 +261,6 @@ log_step "5/12: Installiere Kernel und Live-Boot-Pakete"
 sudo chroot "${CHROOT_DIR}" /bin/bash << "EOF"
 set -e
 export DEBIAN_FRONTEND=noninteractive
-# FIX: Removed deprecated lupin-casper package
 apt-get install -y --no-install-recommends \
     linux-image-generic \
     casper \
@@ -287,10 +284,10 @@ dpkg --add-architecture i386
 apt-get update
 
 # Install full application suite including German language packs
+# FIX: Switched to kde-full metapackage for robustness
 apt-get install -y --no-install-recommends \
     sddm \
-    kde-plasma-desktop \
-    konsole \
+    kde-full \
     language-pack-de \
     language-pack-kde-de \
     firefox \
@@ -300,12 +297,6 @@ apt-get install -y --no-install-recommends \
     gimp \
     libreoffice \
     libreoffice-l10n-de \
-    gwenview \
-    okular \
-    ark \
-    kcalc \
-    spectacle \
-    partitionmanager \
     winehq-staging \
     winetricks \
     steam-installer
