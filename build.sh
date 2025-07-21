@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v18.5 - Early Mirror Integration)
+# AILinux ISO Build-Skript (v18.6 - Fixed Repo Conflicts & drkonqi Dependency)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
@@ -239,30 +239,17 @@ step_06_chroot_desktop() {
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         
-        # FIX: i386-Architektur für Wine hinzufügen
+        # i386-Architektur für Wine hinzufügen
         dpkg --add-architecture i386
         
-        # Externe Repositories und Schlüssel korrekt hinzufügen
-        mkdir -p /etc/apt/keyrings
-        
-        # Google Chrome
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-
-        # WineHQ
-        wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
-        echo "deb [arch=amd64,i386 signed-by=/etc/apt/keyrings/winehq-archive.key] https://dl.winehq.org/wine-builds/ubuntu/ noble main" > /etc/apt/sources.list.d/winehq.list
-
-        # VS Code
-        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/keyrings/vscode.gpg
-        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/vscode.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
-        
-        # Wichtig: APT-Update NACH dem Hinzufügen der Architektur und Repos
+        # Repositories wurden bereits in Schritt 4 hinzugefügt.
+        # Wir müssen nur die Paketlisten aktualisieren, um die i386-Pakete zu sehen.
         apt-get update
         
         # Desktop-Komponenten installieren
-        # --install-recommends wird für wine benötigt
+        # FIX: systemd-coredump explizit hinzufügen, um Abhängigkeit von drkonqi aufzulösen
         apt-get install -y --install-recommends \
+            systemd-coredump \
             kde-full plasma-desktop sddm-theme-breeze xorg \
             firefox thunderbird vlc gimp libreoffice gparted htop neofetch \
             ubuntu-restricted-extras ffmpeg pulseaudio \
@@ -447,8 +434,7 @@ step_08_chroot_calamares() {
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         
-        # FIX: calamares-settings-ubuntu existiert nicht in Noble 24.04.
-        # Installiere nur calamares und benötigte Python-Module und konfiguriere es manuell.
+        # Installiere calamares und benötigte Python-Module
         apt-get install -y calamares python3-pyqt5 python3-yaml python3-parted imagemagick
         
         # Erstelle Calamares Konfigurationsverzeichnisse
@@ -822,7 +808,7 @@ main() {
     start_time=$(date +%s)
     
     echo ""
-    log_info "==================== AILinux ISO Build v18.5 ===================="
+    log_info "==================== AILinux ISO Build v18.6 ===================="
     
     step_01_setup_environment
     step_02_debootstrap
