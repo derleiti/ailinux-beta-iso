@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.2
+# AILinux ISO Build Script v17.3
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now uses a configurable mirror
-# for all Ubuntu package downloads to accelerate the build process.
+# based on Ubuntu 24.04 (noble). It now downloads the mirror's GPG key
+# beforehand and passes it to debootstrap to fix signature verification errors.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -37,6 +37,7 @@ LIVE_USER="ailinux"
 HOSTNAME="ailinux"
 # Use the AILinux mirror for all Ubuntu packages
 UBUNTU_MIRROR="https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu"
+AILINUX_GPG_KEY_URL="https://ailinux.me:8443/mirror/ailinux.gpg"
 
 # Build Directories
 BUILD_DIR="$(pwd)/AILINUX_BUILD"
@@ -201,10 +202,23 @@ fi
 mkdir -p "${BUILD_DIR}" "${ISO_DIR}" "${CHROOT_DIR}"
 log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
+# FIX: Download the GPG key for the mirror before running debootstrap
+log_info "Lade AILinux GPG-Schlüssel für Debootstrap herunter..."
+if ! curl -fksSL "${AILINUX_GPG_KEY_URL}" -o "${BUILD_DIR}/ailinux.gpg"; then
+    log_error "Herunterladen des AILinux GPG-Schlüssels fehlgeschlagen."
+fi
+log_info "GPG-Schlüssel heruntergeladen."
+
 # --- STEP 2: Debootstrap Base System ---
 log_step "2/12: Erstelle Basissystem mit Debootstrap"
-# Use the custom mirror for debootstrap
-sudo debootstrap --arch=amd64 --variant=minbase "${BASE_DISTRO}" "${CHROOT_DIR}" "${UBUNTU_MIRROR}"
+# FIX: Pass the downloaded keyring to debootstrap
+sudo debootstrap \
+    --arch=amd64 \
+    --variant=minbase \
+    --keyring="${BUILD_DIR}/ailinux.gpg" \
+    "${BASE_DISTRO}" \
+    "${CHROOT_DIR}" \
+    "${UBUNTU_MIRROR}"
 log_info "Basissystem für ${BASE_DISTRO} erfolgreich erstellt."
 
 # --- STEP 3: Chroot-Vorbereitung ---
