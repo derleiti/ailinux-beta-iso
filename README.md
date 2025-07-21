@@ -1,3 +1,82 @@
+📄 Vorgeschlagene README.md für dein Repository ailinux-beta-iso
+markdown
+Kopieren
+Bearbeiten
+# AILinux 24.04 Premium – AI-powered Linux Distribution
+
+**AILinux** ist eine moderne, KI-integrierte Live-Linux-Distribution auf Basis von **Ubuntu 24.04 (Noble Numbat)**.  
+Sie wurde entwickelt, um ein vollständig offline-fähiges System mit eingebautem KI-Assistenten bereitzustellen –  
+einschließlich Live-Modus, Calamares-Installer und einem lokalen `aihelp` CLI-Tool für KI-gestützte Systemanalyse.
+
+---
+
+## 📦 ISO-Download
+
+> 🔗 **[Download der aktuellen ISO (5.1 GB)](https://ailinux.me/iso/ailinux-24.04-premium-amd64.iso)**  
+> 🔐 [SHA256 Prüfsumme](https://ailinux.me/iso/ailinux-24.04-premium-amd64.iso.sha256)
+
+---
+
+## ✨ Features
+
+- 🧠 **AILinux Helper** – KI-gestützter Systemassistent (`aihelp`), powered by Mistral API
+- 💻 **Plasma Desktop** – Voll ausgestatteter KDE 6.x mit SDDM Autologin
+- 🌐 **Web & Media** – Firefox, Chrome, VLC, LibreOffice, GIMP, Thunderbird
+- 🎮 **Gaming-ready** – WineHQ (Staging), Winetricks, Steam-kompatibel
+- 🧰 **Entwicklungstools** – Python3, NodeJS, VS Code, Build-Essentials, JDK
+- 🛠️ **System-Tools** – Calamares Installer, GParted, Htop, Bluetooth, Druckertreiber
+- 🔒 **UEFI Secure Boot kompatibel** – mit `shimx64.efi.signed` und GRUB
+
+---
+
+## 🔧 ISO selbst bauen
+
+Du kannst die ISO jederzeit lokal mit dem `build.sh` Skript erzeugen:
+
+```bash
+git clone https://github.com/derleiti/ailinux-beta-iso.git
+cd ailinux-beta-iso
+
+# Optional: .env Datei für KI-Zugang
+cp .env.example .env
+nano .env   # trage deinen Mistral API Key ein
+
+# Build starten (dauert ca. 15–25 Minuten)
+./build.sh
+💡 Du brauchst rootfähigen Benutzerzugang (per sudo) und ca. 10 GB freien Speicher.
+
+📁 Projektstruktur
+bash
+Kopieren
+Bearbeiten
+.
+├── build.sh              # Haupt-Buildskript für ISO
+├── clean.sh              # Bereinigt Mounts & TEMP
+├── branding/             # Logo, Icon, Welcome-Bild für Calamares
+├── AILINUX_BUILD/        # Temporäres Arbeitsverzeichnis beim Build
+├── .env / .env.example   # API-Konfiguration für AILinux Helper
+├── prompt.txt            # Prompt zur Claude-Kommunikation
+├── push.sh               # Sicheres Git-Push-Skript mit PAT
+└── README.md             # Dieses Dokument
+🔐 Lizenz
+MIT License
+© 2024 derleiti
+
+🤖 Kontakt & Mitwirken
+Fragen oder Beiträge willkommen!
+Brumo, Nova & Markus freuen sich über jeden, der bei AILinux mitbasteln möchte.
+➡️ ailinux.me
+
+yaml
+Kopieren
+Bearbeiten
+
+---
+
+✅ Wenn du willst, kann ich dir das direkt als Datei `README.md` ausgeben oder in dein Repo-Verzeichnis schreiben lassen.  
+Willst du auch eine passende `index.html` für die ISO-Downloadseite?
+
+
 # AILinux Beta
 
 ![AILinux](https://img.shields.io/badge/AILinux-24.04%20Premium-blue.svg)
