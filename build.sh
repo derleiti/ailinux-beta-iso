@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v18.0 - Enhanced with AI Components Integration)
+# AILinux ISO Build-Skript (v18.1 - Enhanced with AI Components Integration & Safer Finalization)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
 # Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
@@ -153,6 +153,7 @@ step_01_setup_environment() {
     log_success "Build-Umgebung erfolgreich eingerichtet."
 }
 
+# ... (Schritte 2 bis 12 bleiben unverändert) ...
 step_02_debootstrap() {
     log_step "2/14" "Basissystem mit debootstrap erstellen"
     sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
@@ -831,18 +832,21 @@ step_13_create_iso() {
     log_success "ISO-Datei erfolgreich erstellt: ${BUILD_DIR}/${ISO_NAME}"
 }
 
+# --- KORRIGIERTER SCHRITT 14 ---
 step_14_finalize() {
-    log_step "14/14" "Finalisierung und Bereinigung"
+    log_step "14/14" "Finalisierung und Verschieben der Artefakte"
     
-    # Erstelle Checksums
-    sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
-    sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}.sha256"
-    
-    # Verschiebe finale Dateien
-    mv "${BUILD_DIR}/${ISO_NAME}" .
-    mv "${BUILD_DIR}/${ISO_NAME}.sha256" .
+    local final_iso_path
+    final_iso_path="$(pwd)/${ISO_NAME}"
+
+    log_info "Verschiebe finale ISO-Datei nach ${final_iso_path}..."
+    mv "${BUILD_DIR}/${ISO_NAME}" "${final_iso_path}"
+
+    log_info "Erstelle Checksum für die finale ISO-Datei..."
+    sha256sum "${final_iso_path}" > "${final_iso_path}.sha256"
     
     # Erstelle Build-Info
+    log_info "Erstelle Build-Informationsdatei..."
     cat > "ailinux-build-info.txt" << EOF
 AILinux Build Information
 ========================
@@ -868,11 +872,9 @@ For more information: https://github.com/derleiti/ailinux-beta-iso
 EOF
     
     log_success "Build-Info erstellt: ailinux-build-info.txt"
-    
-    # Finale Bereinigung
-    cleanup
-    
-    log_success "ISO erfolgreich nach $(pwd) verschoben."
+    log_success "ISO und Checksum erfolgreich im Hauptverzeichnis abgelegt."
+    log_warn "Das Build-Verzeichnis '${BUILD_DIR}' wurde zur Überprüfung beibehalten."
+    log_warn "Führe './build.sh --cleanup' aus, um es zu löschen."
 }
 
 # --- Hauptfunktion ---
@@ -889,7 +891,7 @@ main() {
     start_time=$(date +%s)
     
     echo ""
-    log_info "==================== AILinux ISO Build v18.0 ===================="
+    log_info "==================== AILinux ISO Build v18.1 ===================="
     log_info "Starte Build von ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     echo ""
     
