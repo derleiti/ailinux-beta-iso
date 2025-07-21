@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.5
+# AILinux ISO Build Script v17.6
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now creates a temporary, combined
-# GPG keyring with both Ubuntu and AILinux keys to ensure debootstrap
-# can verify all packages from the custom mirror.
+# based on Ubuntu 24.04 (noble). It now bootstraps from the official
+# Ubuntu mirror and then switches to the AILinux mirror for all
+# subsequent package installations to maximize speed and compatibility.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -36,16 +36,16 @@ DISTRO_NAME="AILinux"
 BASE_DISTRO="noble"
 LIVE_USER="ailinux"
 HOSTNAME="ailinux"
-# Use the AILinux mirror for all Ubuntu packages
-UBUNTU_MIRROR="https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu"
-AILINUX_GPG_KEY_URL="https://ailinux.me:8443/mirror/ailinux.gpg"
+# Official Ubuntu mirror for the initial bootstrap
+OFFICIAL_UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu"
+# AILinux mirror for all subsequent package installations
+AILINUX_UBUNTU_MIRROR="https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu"
 
 # Build Directories
 BUILD_DIR="$(pwd)/AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
 ISO_NAME="ailinux-${AILINUX_VERSION}-amd64.iso"
-TEMP_KEYRING="${BUILD_DIR}/temp-keyring.gpg"
 
 # --- Logging and Colors ---
 COLOR_RESET='\033[0m'
@@ -205,28 +205,15 @@ fi
 mkdir -p "${BUILD_DIR}" "${ISO_DIR}" "${CHROOT_DIR}"
 log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
-# FIX: Create a temporary, combined keyring for debootstrap
-log_info "Erstelle temporären GPG-Schlüsselbund für Debootstrap..."
-# Download AILinux key
-curl -fksSL "${AILINUX_GPG_KEY_URL}" -o "${BUILD_DIR}/ailinux.gpg"
-# Download official Ubuntu keyring
-curl -fksSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920d1991bc93c" -o "${BUILD_DIR}/ubuntu-archive-keyring.gpg"
-
-# Create an empty keyring and import both keys
-gpg --no-default-keyring --keyring "${TEMP_KEYRING}" --import "${BUILD_DIR}/ailinux.gpg"
-gpg --no-default-keyring --keyring "${TEMP_KEYRING}" --import "${BUILD_DIR}/ubuntu-archive-keyring.gpg"
-log_info "Temporärer Schlüsselbund erstellt und Schlüssel importiert."
-
 # --- STEP 2: Debootstrap Base System ---
-log_step "2/12: Erstelle Basissystem mit Debootstrap"
-# FIX: Pass the combined keyring to debootstrap
+log_step "2/12: Erstelle Basissystem mit Debootstrap vom offiziellen Mirror"
+# Use the official mirror for the initial bootstrap to avoid GPG issues
 sudo debootstrap \
     --arch=amd64 \
     --variant=minbase \
-    --keyring="${TEMP_KEYRING}" \
     "${BASE_DISTRO}" \
     "${CHROOT_DIR}" \
-    "${UBUNTU_MIRROR}"
+    "${OFFICIAL_UBUNTU_MIRROR}"
 log_info "Basissystem für ${BASE_DISTRO} erfolgreich erstellt."
 
 # --- STEP 3: Chroot-Vorbereitung ---
@@ -239,9 +226,9 @@ safe_mount "sysfs" "sysfs" "${CHROOT_DIR}/sys" "-t sysfs"
 safe_mount "/dev" "/dev" "${CHROOT_DIR}/dev"
 safe_mount "/dev/pts" "/dev/pts" "${CHROOT_DIR}/dev/pts"
 
-# --- STEP 4: Systemkonfiguration und Repository hinzufügen ---
-log_step "4/12: Konfiguriere Basissystem & füge AILinux Repo hinzu"
-# Unquote EOF to allow host variables like $UBUNTU_MIRROR to be expanded
+# --- STEP 4: Systemkonfiguration und Wechsel zum AILinux Mirror ---
+log_step "4/12: Konfiguriere System & wechsle zum AILinux Mirror"
+# Unquote EOF to allow host variables to be expanded
 sudo chroot "${CHROOT_DIR}" /bin/bash << EOF
 set -e
 export DEBIAN_FRONTEND=noninteractive
@@ -249,30 +236,20 @@ export HOME=/root
 export LC_ALL=C
 
 # Set hostname
-echo "ailinux" > /etc/hostname
+echo "${HOSTNAME}" > /etc/hostname
 
-# Configure APT sources to use the custom mirror
-cat > /etc/apt/sources.list << EOL
-deb ${UBUNTU_MIRROR} ${BASE_DISTRO} main restricted universe multiverse
-deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO} main restricted universe multiverse
-deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-updates main restricted universe multiverse
-deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-updates main restricted universe multiverse
-deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-security main restricted universe multiverse
-deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-security main restricted universe multiverse
-deb ${UBUNTU_MIRROR} ${BASE_DISTRO}-backports main restricted universe multiverse
-deb-src ${UBUNTU_MIRROR} ${BASE_DISTRO}-backports main restricted universe multiverse
-EOL
-
-# Install prerequisites for adding repo (curl, etc.)
+# Install prerequisites using the official mirror first
 apt-get update
 apt-get install -y --no-install-recommends locales curl ca-certificates tzdata gnupg wget zstd
 
-# Add AILinux repository
-echo "Füge AILinux Repository hinzu..."
+# Add AILinux repository and switch to AILinux mirror
+# The add-ailinux-repo.sh script is expected to replace /etc/apt/sources.list
+# with the fast AILinux mirror and add the AILinux repository itself.
+echo "Füge AILinux Repository hinzu und wechsle zum Mirror..."
 curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
-echo "Repository hinzugefügt. Aktualisiere Paketlisten erneut..."
+echo "Repository hinzugefügt und Mirror gewechselt. Aktualisiere Paketlisten erneut..."
 
-# Update package list again to include the new repo
+# Update package list again, now using the fast AILinux mirror
 apt-get update
 
 # Configure locales and timezone
@@ -280,7 +257,7 @@ locale-gen en_US.UTF-8 de_DE.UTF-8
 update-locale LANG=de_DE.UTF-8
 dpkg-reconfigure --frontend=noninteractive tzdata
 EOF
-log_info "Systemkonfiguration und AILinux Repository im Chroot abgeschlossen."
+log_info "Systemkonfiguration und Wechsel zum AILinux Mirror abgeschlossen."
 
 # --- STEP 5: Kernel und Live-Boot-Pakete installieren ---
 log_step "5/12: Installiere Kernel und Live-Boot-Pakete"
