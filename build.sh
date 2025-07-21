@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v17.7 - Fixed EFI Mount Conflict)
+# AILinux ISO Build-Skript (v18.0 - Enhanced with AI Components Integration)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat)
-# und den Spezifikationen in prompt.txt.
+# Integriert AILinux Helper und AI-gestützte Systemanalyse-Tools
 #
 # Lizenz: MIT License
 # Copyright (c) 2024 derleiti
@@ -24,6 +24,10 @@ BUILD_DIR="AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
 ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-${DISTRO_EDITION,,}-${ARCHITECTURE}.iso"
+
+# AILinux spezifische Konfiguration
+AI_SERVER_REPO="https://github.com/derleiti/ailinux-server.git"
+AI_CLIENT_REPO="https://github.com/derleiti/ailinux-client.git"
 
 # --- Farb- und Logging-Funktionen ---
 COLOR_RESET='\033[0m'
@@ -54,15 +58,41 @@ check_not_root() {
     fi
 }
 
+check_api_key() {
+    if [ -f ".env" ]; then
+        source .env
+        if [ -z "$MISTRALAPIKEY" ]; then
+            log_warn "MISTRALAPIKEY in .env-Datei ist leer."
+            return 1
+        fi
+        log_info "Mixtral API-Schlüssel aus .env-Datei geladen."
+        return 0
+    else
+        log_warn ".env-Datei nicht gefunden."
+        return 1
+    fi
+}
+
+create_env_template() {
+    if [ ! -f ".env.example" ]; then
+        log_info "Erstelle .env.example Vorlage..."
+        cat > .env.example << 'EOF'
+# .env - API-Schlüssel für den Zugriff auf Mixtral AI
+# Kopiere diese Datei zu .env und füge deinen API-Schlüssel ein
+MISTRALAPIKEY=your_mixtral_api_key_here
+EOF
+    fi
+}
+
 cleanup() {
     log_warn "Starte Bereinigung des Build-Verzeichnisses..."
     set +e # Fehler während der Bereinigung ignorieren
 
-    if mountpoint -q "${CHROOT_DIR}/run"; then sudo umount -f -l "${CHROOT_DIR}/run"; fi
-    if mountpoint -q "${CHROOT_DIR}/sys"; then sudo umount -f -l "${CHROOT_DIR}/sys"; fi
-    if mountpoint -q "${CHROOT_DIR}/proc"; then sudo umount -f -l "${CHROOT_DIR}/proc"; fi
-    if mountpoint -q "${CHROOT_DIR}/dev/pts"; then sudo umount -f -l "${CHROOT_DIR}/dev/pts"; fi
-    if mountpoint -q "${CHROOT_DIR}/dev"; then sudo umount -f -l "${CHROOT_DIR}/dev"; fi
+    if mountpoint -q "${CHROOT_DIR}/run" 2>/dev/null; then sudo umount -f -l "${CHROOT_DIR}/run"; fi
+    if mountpoint -q "${CHROOT_DIR}/sys" 2>/dev/null; then sudo umount -f -l "${CHROOT_DIR}/sys"; fi
+    if mountpoint -q "${CHROOT_DIR}/proc" 2>/dev/null; then sudo umount -f -l "${CHROOT_DIR}/proc"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev/pts" 2>/dev/null; then sudo umount -f -l "${CHROOT_DIR}/dev/pts"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev" 2>/dev/null; then sudo umount -f -l "${CHROOT_DIR}/dev"; fi
 
     log_info "Entferne Build-Verzeichnis: ${BUILD_DIR}"
     sudo rm -rf "${BUILD_DIR}"
@@ -78,9 +108,19 @@ trap 'log_error "Skript unerwartet bei Schritt ${current_step:-unbekannt} beende
 # --- Build-Schritte als Funktionen ---
 
 step_01_setup_environment() {
-    log_step "1/12" "Umgebung einrichten und Abhängigkeiten prüfen"
+    log_step "1/14" "Umgebung einrichten und Abhängigkeiten prüfen"
     
-    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "gnupg")
+    # API-Schlüssel prüfen
+    create_env_template
+    if ! check_api_key; then
+        log_error "Bitte konfiguriere deine .env-Datei mit einem gültigen Mixtral API-Schlüssel."
+        log_error "1. Kopiere .env.example zu .env: cp .env.example .env"
+        log_error "2. Bearbeite .env und trage deinen API-Schlüssel ein"
+        log_error "3. Führe das Skript erneut aus"
+        exit 1
+    fi
+    
+    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "gnupg" "git" "curl" "jq")
     local missing_deps=()
     log_info "Prüfe Abhängigkeiten..."
     
@@ -114,13 +154,13 @@ step_01_setup_environment() {
 }
 
 step_02_debootstrap() {
-    log_step "2/12" "Basissystem mit debootstrap erstellen"
+    log_step "2/14" "Basissystem mit debootstrap erstellen"
     sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     log_success "Basissystem erfolgreich erstellt."
 }
 
 step_03_mount_filesystems() {
-    log_step "3/12" "Pseudo-Dateisysteme einhängen"
+    log_step "3/14" "Pseudo-Dateisysteme einhängen"
     sudo mount --bind /dev "${CHROOT_DIR}/dev"
     sudo mount --bind /dev/pts "${CHROOT_DIR}/dev/pts"
     sudo mount -t proc proc "${CHROOT_DIR}/proc"
@@ -131,7 +171,7 @@ step_03_mount_filesystems() {
 }
 
 step_04_chroot_base_config() {
-    log_step "4/12" "Chroot: Basiskonfiguration, AILinux Repo & Mirror-Wechsel"
+    log_step "4/14" "Chroot: Basiskonfiguration, AILinux Repo & Mirror-Wechsel"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         echo "ailinux" > /etc/hostname
@@ -146,29 +186,38 @@ SOURCES
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         apt-get update
-        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg2 ca-certificates zstd
+        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg2 ca-certificates zstd git
         
         echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
         locale-gen
         update-locale LANG=en_US.UTF-8
         
         echo "Füge AILinux Repository hinzu..."
-        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
+        if curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh 2>/dev/null | bash; then
+            echo "AILinux Repository erfolgreich hinzugefügt."
+        else
+            echo "Warnung: AILinux Repository konnte nicht hinzugefügt werden. Fahre mit Standard-Repositories fort."
+        fi
         
-        echo "Wechsle zu AILinux Ubuntu Mirror..."
-        cat > /etc/apt/sources.list << "MIRROR_SOURCES"
+        # Versuche zu AILinux Mirror zu wechseln, falle zurück auf Standard falls nicht verfügbar
+        if curl -s --connect-timeout 5 https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/dists/noble/Release >/dev/null 2>&1; then
+            echo "Wechsle zu AILinux Ubuntu Mirror..."
+            cat > /etc/apt/sources.list << "MIRROR_SOURCES"
 deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu noble main restricted universe multiverse
 deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse
 deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu noble-security main restricted universe multiverse
 MIRROR_SOURCES
+        else
+            echo "AILinux Mirror nicht erreichbar, verwende Standard Ubuntu Archive."
+        fi
 
         apt-get update
 EOF
-    log_success "Basiskonfiguration und Wechsel zum AILinux Mirror abgeschlossen."
+    log_success "Basiskonfiguration abgeschlossen."
 }
 
 step_05_chroot_kernel_core() {
-    log_step "5/12" "Chroot: Kernel und Core-System installieren"
+    log_step "5/14" "Chroot: Kernel und Core-System installieren"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
@@ -186,7 +235,7 @@ EOF
 }
 
 step_06_chroot_desktop() {
-    log_step "6/12" "Chroot: Desktop und Premium-Anwendungen installieren"
+    log_step "6/14" "Chroot: Desktop und Premium-Anwendungen installieren"
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
@@ -242,7 +291,9 @@ INVOKE_RC_D_STUB
             build-essential \
             python3 \
             python3-pip \
+            python3-venv \
             nodejs \
+            npm \
             default-jdk \
             linux-firmware \
             bluez \
@@ -250,7 +301,13 @@ INVOKE_RC_D_STUB
             wireless-tools \
             wpasupplicant \
             printer-driver-all \
-            cups
+            cups \
+            jq \
+            curl \
+            wget \
+            tree \
+            vim \
+            nano
             
         log_info "Aktiviere wichtige Systemdienste..."
         systemctl enable bluetooth || true
@@ -264,8 +321,188 @@ EOF
     log_success "Desktop und Premium-Anwendungen installiert."
 }
 
-step_07_chroot_calamares() {
-    log_step "7/12" "Chroot: Calamares Installer vollständig einrichten"
+step_07_chroot_ai_components() {
+    log_step "7/14" "Chroot: AILinux KI-Komponenten installieren"
+    
+    # Kopiere die .env-Datei in das Chroot
+    if [ -f ".env" ]; then
+        sudo cp .env "${CHROOT_DIR}/tmp/.env"
+    fi
+    
+    sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+        export LANG=en_US.UTF-8
+        
+        log_info() { echo "[CHROOT-AI] $1"; }
+        
+        log_info "Installiere Python-Abhängigkeiten für AILinux..."
+        python3 -m pip install --break-system-packages requests openai anthropic python-dotenv psutil
+        
+        # Erstelle AILinux Helper Script
+        log_info "Erstelle AILinux Helper..."
+        mkdir -p /opt/ailinux
+        
+        cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
+#!/usr/bin/env python3
+"""
+AILinux Helper - KI-gestützter Systemassistent
+Basierend auf prompt.txt Spezifikation
+"""
+
+import os
+import sys
+import json
+import requests
+from dotenv import load_dotenv
+import argparse
+import subprocess
+
+# Lade Umgebungsvariablen
+load_dotenv()
+
+class AILinuxHelper:
+    def __init__(self):
+        self.api_key = os.getenv('MISTRALAPIKEY')
+        if not self.api_key:
+            print("❌ MISTRALAPIKEY nicht in Umgebungsvariablen gefunden.")
+            sys.exit(1)
+        
+        self.api_url = "https://api.mistral.ai/v1/chat/completions"
+        self.system_prompt = """You are an expert-level Linux system administrator and debugging assistant. Your name is AILinux Helper.
+
+Your primary task is to analyze system logs, error messages, or user queries provided to you. Based on the input, you must provide a concise, accurate, and helpful analysis.
+
+When a user provides you with an error log or a problem description, you MUST respond with the following structure, using Markdown formatting:
+
+### 🚨 Problem Summary
+A brief, one-sentence summary of the core issue.
+
+### ⚙️ Likely Cause
+Your detailed analysis of the root cause of the error or problem. Explain the technical details clearly.
+
+### ✅ Suggested Solution
+A clear, step-by-step command, code snippet, or action the user can take to resolve the issue. If you provide a command, enclose it in a shell code block.
+
+Always be helpful and accurate. If the provided information is insufficient for a full analysis, state what additional information you need. Do not invent commands or file paths if you are uncertain."""
+
+    def analyze_problem(self, user_input):
+        """Analysiere Problem mit Mixtral AI"""
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            "model": "mistral-large-latest",
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1000
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data)
+            response.raise_for_status()
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        except Exception as e:
+            return f"❌ Fehler beim Kontaktieren der AI: {str(e)}"
+
+    def get_system_info(self):
+        """Sammle Systeminformationen"""
+        try:
+            info = {
+                "hostname": subprocess.getoutput("hostname"),
+                "kernel": subprocess.getoutput("uname -r"),
+                "distro": subprocess.getoutput("lsb_release -d 2>/dev/null || echo 'Unknown'"),
+                "uptime": subprocess.getoutput("uptime -p"),
+                "memory": subprocess.getoutput("free -h | head -2 | tail -1"),
+                "disk": subprocess.getoutput("df -h / | tail -1")
+            }
+            return info
+        except:
+            return {"error": "Could not gather system information"}
+
+def main():
+    parser = argparse.ArgumentParser(description='AILinux Helper - KI-gestützter Systemassistent')
+    parser.add_argument('query', nargs='*', help='Problem oder Frage zur Analyse')
+    parser.add_argument('--log', '-l', help='Log-Datei zur Analyse')
+    parser.add_argument('--sysinfo', '-s', action='store_true', help='Systeminformationen anzeigen')
+    
+    args = parser.parse_args()
+    
+    helper = AILinuxHelper()
+    
+    if args.sysinfo:
+        info = helper.get_system_info()
+        print("\n📊 Systeminformationen:")
+        for key, value in info.items():
+            print(f"  {key}: {value}")
+        return
+    
+    user_input = ""
+    
+    if args.log:
+        if os.path.exists(args.log):
+            with open(args.log, 'r') as f:
+                log_content = f.read()
+            user_input = f"Analyse folgende Log-Datei:\n\n{log_content}"
+        else:
+            print(f"❌ Log-Datei {args.log} nicht gefunden.")
+            return
+    elif args.query:
+        user_input = " ".join(args.query)
+    else:
+        print("🤖 AILinux Helper - Geben Sie Ihr Problem ein (Ende mit Ctrl+D):")
+        try:
+            user_input = sys.stdin.read()
+        except KeyboardInterrupt:
+            print("\n👋 Auf Wiedersehen!")
+            return
+    
+    if user_input.strip():
+        print("\n🔍 Analysiere Problem...")
+        analysis = helper.analyze_problem(user_input)
+        print("\n" + analysis)
+    else:
+        print("❌ Keine Eingabe erhalten.")
+
+if __name__ == "__main__":
+    main()
+AIHELPER
+
+        chmod +x /opt/ailinux/ailinux-helper.py
+        
+        # Erstelle Shell-Wrapper für einfache Verwendung
+        cat > /usr/local/bin/aihelp << 'AIHELP_WRAPPER'
+#!/bin/bash
+/opt/ailinux/ailinux-helper.py "$@"
+AIHELP_WRAPPER
+        chmod +x /usr/local/bin/aihelp
+        
+        # Kopiere .env wenn vorhanden
+        if [ -f "/tmp/.env" ]; then
+            cp /tmp/.env /opt/ailinux/.env
+            rm /tmp/.env
+        fi
+        
+        log_info "AILinux KI-Komponenten installiert."
+EOF
+    log_success "AILinux KI-Komponenten erfolgreich installiert."
+}
+
+step_08_chroot_calamares() {
+    log_step "8/14" "Chroot: Calamares Installer vollständig einrichten"
+    
+    # Kopiere Branding-Dateien falls vorhanden
+    if [ -d "branding" ]; then
+        sudo mkdir -p "${CHROOT_DIR}/tmp/branding"
+        sudo cp -r branding/* "${CHROOT_DIR}/tmp/branding/"
+    fi
+    
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
         set -e
         export DEBIAN_FRONTEND=noninteractive
@@ -294,18 +531,32 @@ sequence:
 SETTINGS
 
         mkdir -p /etc/calamares/branding/ailinux
+        
+        # Verwende custom Branding falls verfügbar, sonst Standard
+        if [ -d "/tmp/branding" ] && [ -f "/tmp/branding/product.png" ]; then
+            cp /tmp/branding/product.png /etc/calamares/branding/ailinux/logo.png
+        else
+            convert -size 240x120 xc:'#1d99f3' -font "DejaVu-Sans-Bold" -pointsize 26 -fill white \
+                    -gravity center -draw "text 0,0 'AILinux'" \
+                    /etc/calamares/branding/ailinux/logo.png
+        fi
+        
         cat > /etc/calamares/branding/ailinux/branding.desc << "BRANDING"
 ---
 componentName:  ailinux
 strings:
     productName:        "AILinux 24.04 Premium"
     bootloaderEntryName: "AILinux"
+    welcomeStyleCalamares: true
+    welcomeExpandingLogo: true
 images:
     productLogo:        "logo.png"
+    productWelcome:     "logo.png"
+style:
+    SidebarBackground:  "#2c3e50"
+    SidebarText:        "#ffffff"
+    SidebarTextSelect:  "#3498db"
 BRANDING
-        convert -size 240x120 xc:'#1d99f3' -font "DejaVu-Sans-Bold" -pointsize 26 -fill white \
-                -gravity center -draw "text 0,0 'AILinux'" \
-                /etc/calamares/branding/ailinux/logo.png
 
         mkdir -p /etc/calamares/modules
 
@@ -326,6 +577,8 @@ default_groups:
   - "lpadmin"
   - "audio"
   - "video"
+setRootPassword: true
+reuseUserPasswordForRoot: true
 USERS
 
         cat > /etc/calamares/modules/bootloader.conf << "BOOTLOADER"
@@ -335,12 +588,29 @@ grubInstall: "efi"
 efiBootloaderId: "AILinux"
 BOOTLOADER
 
+        cat > /etc/calamares/modules/postinstall.conf << "POSTINSTALL"
+script: |
+  #!/bin/bash
+  # AILinux Post-Installation Konfiguration
+  
+  # Kopiere AILinux .env falls vorhanden
+  if [ -f "/opt/ailinux/.env" ] && [ ! -f "/target/home/*/opt/ailinux/.env" ]; then
+    mkdir -p /target/opt/ailinux
+    cp /opt/ailinux/.env /target/opt/ailinux/.env
+  fi
+  
+  # Aktiviere AILinux Willkommensnachricht für alle neuen Benutzer
+  echo 'echo -e "\n🤖 AILinux Helper verfügbar! Verwende '\''aihelp'\'' für KI-gestützte Systemhilfe.\n"' >> /target/etc/bash.bashrc
+POSTINSTALL
+
+        # Bereinige temporäre Dateien
+        rm -rf /tmp/branding
 EOF
     log_success "Calamares Installer vollständig konfiguriert."
 }
 
-step_08_chroot_user_setup() {
-    log_step "8/12" "Chroot: Live-Benutzer und Desktop anpassen"
+step_09_chroot_user_setup() {
+    log_step "9/14" "Chroot: Live-Benutzer und Desktop anpassen"
     sudo chroot "${CHROOT_DIR}" /bin/bash -c "export LIVE_USER=${LIVE_USER}" <<'EOF'
         set -e
         useradd -s /bin/bash -d "/home/${LIVE_USER}" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video "${LIVE_USER}"
@@ -371,6 +641,19 @@ Type=Application
 Categories=System;
 DESKTOP_FILE
 
+        cat > "/home/${LIVE_USER}/Desktop/AILinux Helper.desktop" << AI_DESKTOP_FILE
+[Desktop Entry]
+Name=AILinux Helper
+Name[de]=AILinux Helfer
+Comment=AI-powered system analysis and help
+Comment[de]=KI-gestützte Systemanalyse und Hilfe
+Exec=konsole -e aihelp --sysinfo
+Icon=applications-system
+Terminal=false
+Type=Application
+Categories=System;Utility;
+AI_DESKTOP_FILE
+
         ln -s /usr/share/applications/org.kde.konsole.desktop "/home/${LIVE_USER}/Desktop/"
         ln -s /usr/share/applications/firefox.desktop "/home/${LIVE_USER}/Desktop/"
         ln -s /usr/share/applications/google-chrome.desktop "/home/${LIVE_USER}/Desktop/"
@@ -383,9 +666,18 @@ echo "############################################################"
 echo "### Welcome to AILinux 24.04 Premium Edition             ###"
 echo "############################################################"
 echo ""
-echo "To install, use the 'Install AILinux' icon on the desktop."
+echo "🔧 To install, use the 'Install AILinux' icon on the desktop."
+echo "🤖 For AI-powered help, type: aihelp [your question]"
+echo "📊 System info: aihelp --sysinfo"
+echo "📋 Analyze logs: aihelp --log /path/to/logfile"
 echo ""
 BASHRC_CUSTOM
+        
+        # Kopiere .env in das Home-Verzeichnis für den Live-User
+        if [ -f "/opt/ailinux/.env" ]; then
+            mkdir -p "/home/${LIVE_USER}/.config/ailinux"
+            cp /opt/ailinux/.env "/home/${LIVE_USER}/.config/ailinux/.env"
+        fi
         
         chmod +x "/home/${LIVE_USER}/Desktop/"*.desktop
         chown -R "${LIVE_USER}":"${LIVE_USER}" "/home/${LIVE_USER}"
@@ -393,8 +685,8 @@ EOF
     log_success "Live-Benutzer und Desktop angepasst."
 }
 
-step_09_chroot_cleanup() {
-    log_step "9/12" "Chroot: System bereinigen"
+step_10_chroot_cleanup() {
+    log_step "10/14" "Chroot: System bereinigen"
     sudo rm -f "${CHROOT_DIR}/etc/resolv.conf"
     
     sudo chroot "${CHROOT_DIR}" /bin/bash <<'EOF'
@@ -405,17 +697,25 @@ step_09_chroot_cleanup() {
         find /var/log -type f -exec truncate --size 0 {} \;
         rm -f /etc/machine-id /var/lib/dbus/machine-id
         touch /etc/machine-id
+        
+        # Erstelle AILinux Info-Datei
+        cat > /etc/ailinux-release << "AILINUX_RELEASE"
+AILinux 24.04 Premium Edition
+Built with AI-powered system analysis
+Features: KDE Plasma Desktop, Mixtral AI Integration
+Build Date: $(date)
+AILINUX_RELEASE
 EOF
     log_success "Chroot-System bereinigt."
 }
 
-step_10_prepare_iso_structure() {
-    log_step "10/12" "ISO-Struktur vorbereiten und SquashFS erstellen"
+step_11_prepare_iso_structure() {
+    log_step "11/14" "ISO-Struktur vorbereiten und SquashFS erstellen"
     
-    if mountpoint -q "${CHROOT_DIR}/sys"; then sudo umount -l "${CHROOT_DIR}/sys"; fi
-    if mountpoint -q "${CHROOT_DIR}/proc"; then sudo umount -l "${CHROOT_DIR}/proc"; fi
-    if mountpoint -q "${CHROOT_DIR}/dev/pts"; then sudo umount -l "${CHROOT_DIR}/dev/pts"; fi
-    if mountpoint -q "${CHROOT_DIR}/dev"; then sudo umount -l "${CHROOT_DIR}/dev"; fi
+    if mountpoint -q "${CHROOT_DIR}/sys" 2>/dev/null; then sudo umount -l "${CHROOT_DIR}/sys"; fi
+    if mountpoint -q "${CHROOT_DIR}/proc" 2>/dev/null; then sudo umount -l "${CHROOT_DIR}/proc"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev/pts" 2>/dev/null; then sudo umount -l "${CHROOT_DIR}/dev/pts"; fi
+    if mountpoint -q "${CHROOT_DIR}/dev" 2>/dev/null; then sudo umount -l "${CHROOT_DIR}/dev"; fi
     
     mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub,.disk}
     
@@ -428,13 +728,13 @@ step_10_prepare_iso_structure() {
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend -e boot -comp zstd
     
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
-    echo "${DISTRO_NAME} ${DISTRO_VERSION}" > "${ISO_DIR}/.disk/info"
+    echo "${DISTRO_NAME} ${DISTRO_VERSION} - AI-powered Linux Distribution" > "${ISO_DIR}/.disk/info"
     
     log_success "ISO-Struktur und SquashFS erstellt."
 }
 
-step_11_create_bootloaders() {
-    log_step "11/12" "Bootloader (ISOLINUX & GRUB) erstellen"
+step_12_create_bootloaders() {
+    log_step "12/14" "Bootloader (ISOLINUX & GRUB) erstellen"
     
     cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
     cp /usr/lib/syslinux/modules/bios/{ldlinux.c32,libutil.c32,menu.c32} "${ISO_DIR}/isolinux/"
@@ -444,18 +744,29 @@ UI menu.c32
 PROMPT 0
 TIMEOUT 50
 DEFAULT live
+MENU TITLE ${DISTRO_NAME} ${DISTRO_VERSION} Premium - AI-powered Linux
 
 LABEL live
   MENU LABEL Try or Install ${DISTRO_NAME}
   KERNEL /casper/vmlinuz
   APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash ---
+
+LABEL memtest
+  MENU LABEL Memory Test
+  KERNEL /boot/memtest86+.bin
 EOF
 
     cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOF
 set timeout=5
 set default="0"
+
 menuentry "Try or Install ${DISTRO_NAME}" {
     linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper quiet splash ---
+    initrd /casper/initrd
+}
+
+menuentry "Try ${DISTRO_NAME} (safe graphics)" {
+    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash ---
     initrd /casper/initrd
 }
 EOF
@@ -469,48 +780,35 @@ EOF
     mkdir -p "${ISO_DIR}/EFI/BOOT"
     cp "${ISO_DIR}/boot/grub/bootx64.efi" "${ISO_DIR}/EFI/BOOT/"
     
-    # Prüfe ob shim vorhanden ist
+    # Verwende shim falls vorhanden
     if [ -f /usr/lib/shim/shimx64.efi.signed ]; then
         cp /usr/lib/shim/shimx64.efi.signed "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
     else
-        # Falls shim nicht vorhanden, verwende grub direkt
         cp "${ISO_DIR}/boot/grub/bootx64.efi" "${ISO_DIR}/EFI/BOOT/BOOTX64.EFI"
     fi
 
-    # WICHTIG: Erstelle das EFI-Image, das xorriso benötigt
     log_info "Erstelle EFI-Boot-Image..."
-    
-    # Berechne die Größe für das EFI-Image (in KB, mindestens 4MB)
     EFI_SIZE=$(($(du -s "${ISO_DIR}/EFI" | cut -f1) + 1024))
     EFI_SIZE=$((EFI_SIZE < 4096 ? 4096 : EFI_SIZE))
     
-    # Erstelle ein FAT32-Dateisystem für EFI
     dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1k count=${EFI_SIZE} status=none
     mkfs.vfat -n "EFIBOOT" "${ISO_DIR}/boot/grub/efi.img" >/dev/null
     
-    # Mounte das Image und kopiere die EFI-Dateien
     EFI_MOUNT=$(mktemp -d)
     sudo mount -o loop "${ISO_DIR}/boot/grub/efi.img" "${EFI_MOUNT}"
-    
-    # Erstelle die Verzeichnisstruktur im Image
     sudo mkdir -p "${EFI_MOUNT}/EFI/BOOT"
-    
-    # Kopiere die Dateien einzeln um Konflikte zu vermeiden
     sudo cp "${ISO_DIR}/EFI/BOOT/"* "${EFI_MOUNT}/EFI/BOOT/" 2>/dev/null || true
-    
-    # Unmount das Image
     sudo umount "${EFI_MOUNT}"
     rmdir "${EFI_MOUNT}"
 
     log_success "Bootloader-Konfigurationen erstellt."
 }
 
-step_12_create_iso() {
-    log_step "12/12" "Finale ISO-Datei mit xorriso erstellen"
+step_13_create_iso() {
+    log_step "13/14" "Finale ISO-Datei mit xorriso erstellen"
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
-    # KORREKTUR: Robuste isohybrid-Erstellung für große Dateien
     sudo xorriso -as mkisofs \
         -o "${BUILD_DIR}/${ISO_NAME}" \
         -V "${volume_id}" \
@@ -529,13 +827,53 @@ step_12_create_iso() {
 
     sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}"
     log_success "ISO-Datei erfolgreich erstellt: ${BUILD_DIR}/${ISO_NAME}"
-    
-    sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
-    sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}.sha256"
-    log_success "SHA256-Hash wurde erstellt."
 }
 
-# --- Skriptausführung ---
+step_14_finalize() {
+    log_step "14/14" "Finalisierung und Bereinigung"
+    
+    # Erstelle Checksums
+    sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
+    sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}.sha256"
+    
+    # Verschiebe finale Dateien
+    mv "${BUILD_DIR}/${ISO_NAME}" .
+    mv "${BUILD_DIR}/${ISO_NAME}.sha256" .
+    
+    # Erstelle Build-Info
+    cat > "ailinux-build-info.txt" << EOF
+AILinux Build Information
+========================
+Build Date: $(date)
+Distribution: ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}
+Architecture: ${ARCHITECTURE}
+ISO File: ${ISO_NAME}
+
+Features:
+- Ubuntu 24.04 LTS base
+- KDE Plasma Desktop
+- Calamares Installer
+- AI-powered System Helper (aihelp command)
+- Mixtral AI integration
+- Premium application suite
+
+Usage:
+- Boot from USB/DVD to try AILinux
+- Use "aihelp" command for AI assistance
+- Install using the desktop installer
+
+For more information: https://github.com/derleiti/ailinux-beta-iso
+EOF
+    
+    log_success "Build-Info erstellt: ailinux-build-info.txt"
+    
+    # Finale Bereinigung
+    cleanup
+    
+    log_success "ISO erfolgreich nach $(pwd) verschoben."
+}
+
+# --- Hauptfunktion ---
 main() {
     check_not_root
     
@@ -548,25 +886,25 @@ main() {
     local start_time
     start_time=$(date +%s)
     
+    echo ""
+    log_info "==================== AILinux ISO Build v18.0 ===================="
+    log_info "Starte Build von ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
+    echo ""
+    
     current_step="1: Setup" && step_01_setup_environment
     current_step="2: Debootstrap" && step_02_debootstrap
     current_step="3: Mounts" && step_03_mount_filesystems
     current_step="4: Chroot Base" && step_04_chroot_base_config
     current_step="5: Chroot Kernel" && step_05_chroot_kernel_core
     current_step="6: Chroot Desktop" && step_06_chroot_desktop
-    current_step="7: Chroot Calamares" && step_07_chroot_calamares
-    current_step="8: Chroot User" && step_08_chroot_user_setup
-    current_step="9: Chroot Cleanup" && step_09_chroot_cleanup
-    current_step="10: ISO Structure" && step_10_prepare_iso_structure
-    current_step="11: Bootloaders" && step_11_create_bootloaders
-    current_step="12: Create ISO" && step_12_create_iso
-    
-    log_info "Verschiebe fertige ISO und SHA256 in das Projektverzeichnis..."
-    mv "${BUILD_DIR}/${ISO_NAME}" .
-    mv "${BUILD_DIR}/${ISO_NAME}.sha256" .
-    
-    # Finale Bereinigung
-    cleanup
+    current_step="7: Chroot AI" && step_07_chroot_ai_components
+    current_step="8: Chroot Calamares" && step_08_chroot_calamares
+    current_step="9: Chroot User" && step_09_chroot_user_setup
+    current_step="10: Chroot Cleanup" && step_10_chroot_cleanup
+    current_step="11: ISO Structure" && step_11_prepare_iso_structure
+    current_step="12: Bootloaders" && step_12_create_bootloaders
+    current_step="13: Create ISO" && step_13_create_iso
+    current_step="14: Finalize" && step_14_finalize
     
     local end_time
     end_time=$(date +%s)
@@ -575,7 +913,12 @@ main() {
     echo ""
     log_success "==================== BUILD ERFOLGREICH ABGESCHLOSSEN ===================="
     log_success "ISO: $(realpath "${ISO_NAME}")"
+    log_success "SHA256: $(realpath "${ISO_NAME}.sha256")"
+    log_success "Build-Info: $(realpath "ailinux-build-info.txt")"
     log_success "Dauer: $((duration / 60)) Minuten und $((duration % 60)) Sekunden."
+    echo ""
+    log_info "🤖 Die AI-gestützten Features sind verfügbar über den 'aihelp' Befehl!"
+    log_info "📋 Verwende 'aihelp --help' für weitere Optionen."
     echo ""
 }
 
