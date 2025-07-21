@@ -1,10 +1,11 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v17.4
+# AILinux ISO Build Script v17.5
 #
 # This script automates the creation of a bootable AILinux Live ISO
-# based on Ubuntu 24.04 (noble). It now correctly handles custom mirror GPG keys
-# by temporarily adding them to the host's trusted APT keys for debootstrap.
+# based on Ubuntu 24.04 (noble). It now creates a temporary, combined
+# GPG keyring with both Ubuntu and AILinux keys to ensure debootstrap
+# can verify all packages from the custom mirror.
 #
 # Copyright (c) 2024 Your Name/Project
 #
@@ -44,7 +45,7 @@ BUILD_DIR="$(pwd)/AILINUX_BUILD"
 CHROOT_DIR="${BUILD_DIR}/chroot"
 ISO_DIR="${BUILD_DIR}/iso"
 ISO_NAME="ailinux-${AILINUX_VERSION}-amd64.iso"
-TEMP_GPG_KEY_PATH="/etc/apt/trusted.gpg.d/ailinux-build-key.gpg"
+TEMP_KEYRING="${BUILD_DIR}/temp-keyring.gpg"
 
 # --- Logging and Colors ---
 COLOR_RESET='\033[0m'
@@ -84,7 +85,7 @@ check_sudo() {
 check_dependencies() {
     log_info "Überprüfe Abhängigkeiten..."
     local missing_deps=()
-    local deps=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "curl")
+    local deps=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "curl" "gpg")
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             missing_deps+=("$dep")
@@ -156,12 +157,6 @@ safe_umount() {
 # Cleanup function to be called on exit or error
 cleanup() {
     log_step "Aufräumen"
-    
-    # FIX: Remove temporary GPG key from host
-    if [ -f "${TEMP_GPG_KEY_PATH}" ]; then
-        log_info "Entferne temporären GPG-Schlüssel vom Host-System..."
-        sudo rm -f "${TEMP_GPG_KEY_PATH}"
-    fi
 
     safe_umount "${CHROOT_DIR}/dev/pts"
     safe_umount "${CHROOT_DIR}/dev"
@@ -210,21 +205,25 @@ fi
 mkdir -p "${BUILD_DIR}" "${ISO_DIR}" "${CHROOT_DIR}"
 log_info "Build-Verzeichnisstruktur erstellt unter ${BUILD_DIR}"
 
-# FIX: Download the GPG key and add it to the host's trusted keys for debootstrap
-log_info "Lade AILinux GPG-Schlüssel herunter..."
-if ! curl -fksSL "${AILINUX_GPG_KEY_URL}" -o "${BUILD_DIR}/ailinux.gpg"; then
-    log_error "Herunterladen des AILinux GPG-Schlüssels fehlgeschlagen."
-fi
-log_info "Füge GPG-Schlüssel temporär zum Host-System hinzu..."
-sudo cp "${BUILD_DIR}/ailinux.gpg" "${TEMP_GPG_KEY_PATH}"
-log_info "GPG-Schlüssel hinzugefügt."
+# FIX: Create a temporary, combined keyring for debootstrap
+log_info "Erstelle temporären GPG-Schlüsselbund für Debootstrap..."
+# Download AILinux key
+curl -fksSL "${AILINUX_GPG_KEY_URL}" -o "${BUILD_DIR}/ailinux.gpg"
+# Download official Ubuntu keyring
+curl -fksSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920d1991bc93c" -o "${BUILD_DIR}/ubuntu-archive-keyring.gpg"
+
+# Create an empty keyring and import both keys
+gpg --no-default-keyring --keyring "${TEMP_KEYRING}" --import "${BUILD_DIR}/ailinux.gpg"
+gpg --no-default-keyring --keyring "${TEMP_KEYRING}" --import "${BUILD_DIR}/ubuntu-archive-keyring.gpg"
+log_info "Temporärer Schlüsselbund erstellt und Schlüssel importiert."
 
 # --- STEP 2: Debootstrap Base System ---
 log_step "2/12: Erstelle Basissystem mit Debootstrap"
-# FIX: Removed the --keyring option. Debootstrap will now use the host's trusted keys.
+# FIX: Pass the combined keyring to debootstrap
 sudo debootstrap \
     --arch=amd64 \
     --variant=minbase \
+    --keyring="${TEMP_KEYRING}" \
     "${BASE_DISTRO}" \
     "${CHROOT_DIR}" \
     "${UBUNTU_MIRROR}"
