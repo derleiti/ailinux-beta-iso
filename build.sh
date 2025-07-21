@@ -77,7 +77,7 @@ trap cleanup EXIT
 trap 'error_exit "FEHLER in Zeile $LINENO: Befehl \`$BASH_COMMAND\` schlug mit Status $? fehl."' ERR
 
 # --- 1. Host-Vorbereitung ---
-log "AILinux Build Script gestartet (Version 10.38 - AILinux Repository Fix)"
+log "AILinux Build Script gestartet (Version 10.39 - Offizielles AILinux Repository Script)"
 
 if [[ $(id -u) -eq 0 ]]; then
   error_exit "Bitte Skript nicht als root ausführen"
@@ -152,6 +152,8 @@ pre_setup_chroot() {
         info_chroot "WARNUNG: Repository-Update fehlgeschlagen - fahre trotzdem fort"
     }
     
+    info_chroot "Repositories erfolgreich konfiguriert"
+    
     # Installiere essentielle Pakete
     apt-get install -y apt-utils locales
     
@@ -169,6 +171,8 @@ pre_setup_chroot() {
 # --- Chroot Phase 2: Repositories einrichten ---
 setup_repositories() {
     info_chroot "Phase 2: Richte Repositories ein..."
+    
+    # Stelle sicher, dass curl verfügbar ist
     apt-get install -y curl gnupg software-properties-common
 
     local KEYRING_DIR="/etc/apt/keyrings"
@@ -183,18 +187,9 @@ Suites: noble noble-updates noble-security
 Components: main restricted universe multiverse
 SRC
 
-    # AILinux Repository hinzufügen
-    if wget -qO "/tmp/ailinux.gpg" "https://ailinux.me:8443/mirror/ailinux.gpg" 2>/dev/null; then
-        gpg --dearmor -o "${KEYRING_DIR}/ailinux.gpg" "/tmp/ailinux.gpg"
-        rm -f "/tmp/ailinux.gpg"
-        tee /etc/apt/sources.list.d/ailinux.sources >/dev/null <<SRC
-Types: deb
-URIs: https://ailinux.me:8443/mirror/archive.ailinux.me
-Suites: stable
-Components: main
-Signed-By: ${KEYRING_DIR}/ailinux.gpg
-SRC
-        info_chroot "AILinux Repository hinzugefügt"
+    # AILinux Repository mit offiziellem Script hinzufügen
+    if curl -fssSL https://ailinux.me/mirror/add-ailinux-repo.sh | bash; then
+        info_chroot "✓ AILinux Repository erfolgreich hinzugefügt"
     else
         info_chroot "WARNUNG: AILinux Repository konnte nicht hinzugefügt werden"
     fi
@@ -271,7 +266,10 @@ install_packages() {
     safe_install steam-installer || info_chroot "Steam nicht verfügbar"
     
     # AILinux spezifische Pakete (falls verfügbar)
+    info_chroot "Prüfe AILinux spezifische Pakete..."
     safe_install ailinux-app || info_chroot "AILinux App nicht verfügbar"
+    safe_install ailinux-tools || info_chroot "AILinux Tools nicht verfügbar"
+    safe_install ailinux-themes || info_chroot "AILinux Themes nicht verfügbar"
     
     # Installer
     safe_install calamares || info_chroot "Calamares nicht verfügbar - versuche Alternative"
