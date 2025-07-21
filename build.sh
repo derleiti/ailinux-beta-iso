@@ -61,7 +61,7 @@ check_not_root() {
 check_api_key() {
     if [ -f ".env" ]; then
         source .env
-        if [ -z "$MISTRALAPIKEY" ]; then
+        if [ -z "${MISTRALAPIKEY:-}" ]; then
             log_warn "MISTRALAPIKEY in .env-Datei ist leer."
             return 1
         fi
@@ -663,7 +663,7 @@ AI_DESKTOP_FILE
 # AILinux Welcome Message
 echo ""
 echo "############################################################"
-echo "### Welcome to AILinux 24.04 Premium Edition             ###"
+echo "### Welcome to AILinux 24.04 Premium Edition           ###"
 echo "############################################################"
 echo ""
 echo "🔧 To install, use the 'Install AILinux' icon on the desktop."
@@ -809,9 +809,11 @@ step_13_create_iso() {
     
     local volume_id="${DISTRO_NAME} ${DISTRO_VERSION}"
     
+    # KORRIGIERTER BEFEHL: -iso-level 3 hinzugefügt, um das 4-GiB-Limit zu umgehen.
     sudo xorriso -as mkisofs \
         -o "${BUILD_DIR}/${ISO_NAME}" \
         -V "${volume_id}" \
+        -iso-level 3 \
         -r -J -l \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
@@ -877,7 +879,7 @@ EOF
 main() {
     check_not_root
     
-    if [ "$1" == "--cleanup" ]; then
+    if [ "${1:-}" == "--cleanup" ]; then
         log_warn "Manuelle Bereinigung angefordert."
         cleanup
         exit 0
