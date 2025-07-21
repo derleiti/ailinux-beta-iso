@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build-Skript (v16.4 - Final)
+# AILinux ISO Build-Skript (v16.5 - Final mit ISO-Verschiebung)
 # Erstellt eine bootfähige Live-ISO von AILinux basierend auf Ubuntu 24.04 (Noble Numbat).
 #
 # Lizenz: MIT License
@@ -79,7 +79,7 @@ safe_umount() {
 }
 
 cleanup() {
-    log_warn "Starte Bereinigung..."
+    log_warn "Starte Bereinigung des Build-Verzeichnisses..."
     set +e # Fehler während der Bereinigung ignorieren
 
     safe_umount "${CHROOT_DIR}/run"
@@ -170,7 +170,6 @@ SOURCES
         export LANG=en_US.UTF-8
         export LC_ALL=en_US.UTF-8
         apt-get update
-        # zstd für schnellere Kompression hinzufügen
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg2 ca-certificates zstd
         
         echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
@@ -369,14 +368,12 @@ step_10_prepare_iso_structure() {
     
     mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub,.disk}
     
-    # KORREKTUR: sudo verwenden, um auf root-eigene Dateien zuzugreifen
     sudo cp "${CHROOT_DIR}"/boot/vmlinuz-*-generic "${ISO_DIR}/casper/vmlinuz"
     sudo cp "${CHROOT_DIR}"/boot/initrd.img-*-generic "${ISO_DIR}/casper/initrd"
     
     sudo chroot "${CHROOT_DIR}" dpkg-query -W --showformat='${Package}\t${Version}\n' > "${ISO_DIR}/casper/filesystem.manifest"
     
     log_info "Erstelle SquashFS-Abbild mit zstd (dies kann dauern)..."
-    # KORREKTUR: Auf zstd Kompression umgestellt
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -noappend -e boot -comp zstd
     
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
@@ -449,6 +446,7 @@ step_12_create_iso() {
     log_success "ISO-Datei erfolgreich erstellt: ${BUILD_DIR}/${ISO_NAME}"
     
     sha256sum "${BUILD_DIR}/${ISO_NAME}" > "${BUILD_DIR}/${ISO_NAME}.sha256"
+    sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}.sha256"
     log_success "SHA256-Hash wurde erstellt."
 }
 
@@ -478,6 +476,11 @@ main() {
     current_step="11: Bootloaders" && step_11_create_bootloaders
     current_step="12: Create ISO" && step_12_create_iso
     
+    # --- KORREKTUR: ISO und SHA256 vor dem Aufräumen verschieben ---
+    log_info "Verschiebe fertige ISO und SHA256 in das Projektverzeichnis..."
+    mv "${BUILD_DIR}/${ISO_NAME}" .
+    mv "${BUILD_DIR}/${ISO_NAME}.sha256" .
+    
     # Finale Bereinigung
     cleanup
     
@@ -487,7 +490,7 @@ main() {
     
     echo ""
     log_success "==================== BUILD ERFOLGREICH ABGESCHLOSSEN ===================="
-    log_success "ISO: $(realpath "${BUILD_DIR}/${ISO_NAME}")"
+    log_success "ISO: $(realpath "${ISO_NAME}")"
     log_success "Dauer: $((duration / 60)) Minuten und $((duration % 60)) Sekunden."
     echo ""
 }
