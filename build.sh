@@ -568,17 +568,13 @@ fi
 # Create Calamares configuration
 mkdir -p /etc/calamares/modules
 
-# Main settings - CORRECTED VERSION
+# Main settings - WITHOUT problematic postinstall module
 cat > /etc/calamares/settings.conf << 'SETTINGS'
 ---
 modules-search: [ local ]
 
 instances:
 - id:       rootfs
-  module:   unpackfs
-  config:   unpackfs.conf
-
-- id:       vmlinuz
   module:   unpackfs
   config:   unpackfs.conf
 
@@ -605,7 +601,6 @@ sequence:
   - hwclock
   - services-systemd
   - bootloader
-  - postinstall
   - umount
 - show:
   - finished
@@ -927,84 +922,6 @@ basicSetup: false
 
 sysconfigSetup: false
 DISPLAYMGR
-
-# Post-install script configuration
-cat > /etc/calamares/modules/postinstall.conf << 'POSTINSTALL'
----
-dontChroot: false
-timeout: 999
-script:
-    - "/usr/local/bin/ailinux-postinstall.sh"
-POSTINSTALL
-
-# Create a working post-install script that copies AI components
-cat > /usr/local/bin/ailinux-postinstall.sh << 'POSTSCRIPT'
-#!/bin/bash
-# AILinux Post-Installation Script
-
-echo "Starting AILinux post-installation configuration..."
-
-# Ensure the script is executable
-chmod +x "$0"
-
-# Copy AI helper configuration to installed system
-if [ -f /opt/ailinux/.env ]; then
-    echo "Copying AI helper to installed system..."
-    mkdir -p /target/opt/ailinux
-    cp /opt/ailinux/.env /target/opt/ailinux/.env 2>/dev/null || echo "No .env file found"
-    cp /opt/ailinux/ailinux-helper.py /target/opt/ailinux/ailinux-helper.py 2>/dev/null || echo "No ailinux-helper.py found"
-    chmod +x /target/opt/ailinux/ailinux-helper.py 2>/dev/null
-    
-    # Create symlink in target system
-    chroot /target ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp 2>/dev/null || echo "Could not create aihelp symlink"
-    echo "AI helper configuration copied."
-else
-    echo "Warning: AI helper configuration not found."
-fi
-
-# Configure services in target system
-echo "Enabling system services..."
-chroot /target systemctl enable sddm 2>/dev/null || echo "Could not enable SDDM"
-chroot /target systemctl enable NetworkManager 2>/dev/null || echo "Could not enable NetworkManager"  
-chroot /target systemctl enable bluetooth 2>/dev/null || echo "Could not enable Bluetooth"
-chroot /target systemctl enable cups 2>/dev/null || echo "Could not enable CUPS"
-
-# Create welcome message for installed system
-echo "Creating welcome message..."
-cat > /target/etc/motd << 'MOTD_EOF'
-
-╔══════════════════════════════════════════════════════════════════════╗
-║                    🧠 AILinux 24.04 Premium 🧠                      ║
-║                  KI-gestützte Linux-Distribution                     ║
-╚══════════════════════════════════════════════════════════════════════╝
-
-Willkommen bei AILinux 24.04 Premium!
-
-🚀 Erste Schritte:
-  • Verwenden Sie 'aihelp' für KI-gestützte Systemhilfe
-  • Nutzen Sie 'aihelp --sysinfo' für Systeminformationen  
-  • Bei Problemen: 'aihelp "Ihr Problem hier beschreiben"'
-
-📚 Mehr Informationen: https://github.com/derleiti/ailinux-beta-iso
-🐛 Support: https://github.com/derleiti/ailinux-beta-iso/issues
-
-MOTD_EOF
-
-# Set correct permissions
-chroot /target chown root:root /etc/motd 2>/dev/null
-chroot /target chmod 644 /etc/motd 2>/dev/null
-
-echo "AILinux post-installation completed successfully."
-exit 0
-POSTSCRIPT
-chmod +x /usr/local/bin/ailinux-postinstall.sh
-
-# Test if the post-install script is working
-if [ -x /usr/local/bin/ailinux-postinstall.sh ]; then
-    echo "Post-install script created and is executable."
-else
-    echo "Warning: Post-install script creation failed."
-fi
 
 echo "Calamares configuration completed successfully."
 CALAMARES_EOF
