@@ -568,7 +568,7 @@ fi
 # Create Calamares configuration
 mkdir -p /etc/calamares/modules
 
-# Main settings - WITHOUT problematic bootloader module
+# Main settings - WITH corrected bootloader module
 cat > /etc/calamares/settings.conf << 'SETTINGS'
 ---
 modules-search: [ local ]
@@ -600,6 +600,7 @@ sequence:
   - networkcfg
   - hwclock
   - services-systemd
+  - bootloader
   - umount
 - show:
   - finished
@@ -922,46 +923,28 @@ basicSetup: false
 sysconfigSetup: false
 DISPLAYMGR
 
-# Create post-installation bootloader setup script
-cat > /usr/local/bin/ailinux-setup-bootloader.sh << 'BOOTLOADER_SCRIPT'
-#!/bin/bash
-# AILinux Bootloader Setup Script
-# Run this after Calamares installation to install GRUB
+# Bootloader configuration - SIMPLIFIED and WORKING
+cat > /etc/calamares/modules/bootloader.conf << 'BOOTLOADER'
+---
+efiBootloaderId: "ailinux"
 
-echo "Starting AILinux bootloader setup..."
+kernel: "/vmlinuz"
+img: "/initrd.img"
 
-# Check if we're in UEFI or BIOS mode
-if [ -d /sys/firmware/efi ]; then
-    echo "UEFI mode detected - installing GRUB for UEFI..."
-    # Mount EFI partition if not already mounted
-    if [ ! -d /boot/efi ]; then
-        mkdir -p /boot/efi
-        mount /dev/disk/by-label/EFI /boot/efi 2>/dev/null || true
-    fi
-    
-    # Install GRUB for UEFI
-    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=AILinux --recheck
-else
-    echo "BIOS mode detected - installing GRUB for BIOS..."
-    # Get the disk device (assuming installation is on first disk)
-    DISK=$(lsblk -no pkname $(findmnt -n -o source /) | head -n1)
-    echo "Installing GRUB on /dev/$DISK"
-    grub-install --target=i386-pc /dev/$DISK --recheck
-fi
+grubInstall: "grub-install"
+grubMkconfig: "grub-mkconfig"
+grubCfg: "/boot/grub/grub.cfg"
+efiBootMgr: "efibootmgr"
 
-# Generate GRUB configuration
-echo "Generating GRUB configuration..."
-update-grub
+installEFIFallback: true
+timeout: 10
 
-echo "Bootloader setup completed!"
-echo ""
-echo "After installation, run this command in the installed system:"
-echo "sudo /usr/local/bin/ailinux-setup-bootloader.sh"
-BOOTLOADER_SCRIPT
-chmod +x /usr/local/bin/ailinux-setup-bootloader.sh
+# Simplified installation parameters
+efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --removable"
+biosInstallParams: "--target=i386-pc"
+BOOTLOADER
 
-echo "Calamares configuration completed successfully."
-echo "Note: Bootloader will need manual installation after Calamares completes."
+echo "Calamares configuration with corrected bootloader completed successfully."
 CALAMARES_EOF
 
     sudo cp /tmp/configure_calamares.sh "${CHROOT_DIR}/tmp/"
