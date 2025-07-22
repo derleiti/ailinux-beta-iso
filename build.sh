@@ -230,9 +230,10 @@ EOF
 
         # Add AILinux repository (after curl/wget are installed)
         echo 'Adding AILinux custom repository...'
-        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash || {
+        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash || true
+        if [ \$? -ne 0 ]; then
             echo 'Warning: AILinux repo script not available, continuing without it...'
-        }
+        fi
 
         # Add Microsoft VS Code repository
         echo 'Adding Microsoft VS Code repository...'
@@ -307,32 +308,36 @@ step_03_install_packages() {
         echo 'Installing optional packages...'
         
         # Google Chrome
-        apt-get install -y google-chrome-stable || {
+        apt-get install -y google-chrome-stable || true
+        if ! dpkg -l google-chrome-stable &>/dev/null; then
             echo 'Google Chrome installation failed, trying alternative method...'
             wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb || true
             if [ -f /tmp/chrome.deb ]; then
                 dpkg -i /tmp/chrome.deb || apt-get install -f -y
                 rm -f /tmp/chrome.deb
             fi
-        }
+        fi
         
         # Wine
-        apt-get install -y winehq-staging winetricks || {
+        apt-get install -y winehq-staging winetricks || true
+        if ! dpkg -l winehq-staging &>/dev/null; then
             echo 'Wine installation failed, trying alternative approach...'
-            apt-get install -y wine wine32 wine64 winetricks || {
+            apt-get install -y wine wine32 wine64 winetricks || true
+            if ! dpkg -l wine &>/dev/null; then
                 echo 'Wine installation completely failed, skipping...'
-            }
-        }
+            fi
+        fi
         
         # VS Code
-        apt-get install -y code || {
+        apt-get install -y code || true
+        if ! dpkg -l code &>/dev/null; then
             echo 'VS Code installation failed, trying direct download...'
             wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb || true
             if [ -f /tmp/vscode.deb ]; then
                 dpkg -i /tmp/vscode.deb || apt-get install -f -y
                 rm -f /tmp/vscode.deb
             fi
-        }
+        fi
     "
     log_success "All core packages and desktop environment installed."
 }
