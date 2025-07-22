@@ -546,13 +546,21 @@ step_05_configure_calamares() {
     cat > /tmp/configure_calamares.sh << 'CALAMARES_EOF'
 #!/bin/bash
 set -e
-# Install Calamares and dependencies
-apt-get install -y calamares calamares-settings-ubuntu python3-pyqt5 python3-yaml python3-parted imagemagick
-if [ $? -ne 0 ]; then
-    echo 'Warning: Some Calamares packages not available, trying minimal installation...'
-    apt-get install -y calamares
-    if [ $? -ne 0 ]; then
-        echo 'Calamares not available in repositories'
+# Install Calamares and dependencies (without ubuntu-specific settings)
+echo 'Installing Calamares installer...'
+if apt-get install -y calamares python3-pyqt5 python3-yaml python3-parted imagemagick; then
+    echo 'Calamares installed successfully.'
+else
+    echo 'Some Calamares dependencies failed, trying minimal installation...'
+    if apt-get install -y calamares; then
+        echo 'Minimal Calamares installation successful.'
+        # Install optional dependencies individually
+        apt-get install -y python3-pyqt5 || echo 'PyQt5 not available'
+        apt-get install -y python3-yaml || echo 'PyYAML not available'  
+        apt-get install -y python3-parted || echo 'python3-parted not available'
+        apt-get install -y imagemagick || echo 'ImageMagick not available'
+    else
+        echo 'Calamares installation failed completely. Continuing without installer...'
         exit 0
     fi
 fi
