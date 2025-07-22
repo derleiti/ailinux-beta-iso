@@ -1,21 +1,33 @@
 AILinux Build Information
 ========================
-Build Date: Di 22. Jul 00:00:53 CEST 2025
+Build Date: Di 22. Jul 12:14:46 CEST 2025
 Distribution: AILinux 24.04 Premium
 Architecture: amd64
 ISO File: ailinux-24.04-premium-amd64.iso
+ISO Size: 5,3G
 
 Features:
 - Ubuntu 24.04 LTS base
-- KDE Plasma Desktop
-- Calamares Installer
+- KDE Plasma Desktop (kde-full)
+- Calamares Installer with custom branding
 - AI-powered System Helper (aihelp command)
-- Mixtral AI integration
+- Mixtral AI integration via API
 - Premium application suite
+- BIOS and UEFI boot support with Secure Boot
+- zstd compressed SquashFS
+
+Included Software:
+- Desktop: KDE Plasma, SDDM, Konsole
+- Browsers: Firefox, Google Chrome
+- Office: LibreOffice Suite
+- Media: VLC, GIMP
+- Development: VS Code, Git, Python, Node.js, JDK
+- Windows Support: Wine, Winetricks
+- System Tools: GParted, Htop, NetworkManager
 
 Usage:
 - Boot from USB/DVD to try AILinux
 - Use "aihelp" command for AI assistance
-- Install using the desktop installer
+- Install using the desktop installer (Calamares)
 
 For more information: https://github.com/derleiti/ailinux-beta-iso

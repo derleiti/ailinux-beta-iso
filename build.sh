@@ -1189,12 +1189,12 @@ MENU BACKGROUND #3498db
 LABEL live
   MENU LABEL Try or Install ${DISTRO_NAME}
   KERNEL /casper/vmlinuz
-  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash ---
+  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash username=ailinux hostname=ailinux
 
 LABEL live-safe
   MENU LABEL Try ${DISTRO_NAME} (safe graphics)
   KERNEL /casper/vmlinuz
-  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd nomodeset quiet splash ---
+  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd nomodeset quiet splash username=ailinux hostname=ailinux
 
 LABEL memtest
   MENU LABEL Memory Test
@@ -1215,12 +1215,12 @@ if loadfont /boot/grub/font.pf2 ; then
 fi
 
 menuentry "Try or Install ${DISTRO_NAME}" {
-    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper quiet splash ---
+    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper quiet splash username=ailinux hostname=ailinux
     initrd /casper/initrd
 }
 
 menuentry "Try ${DISTRO_NAME} (safe graphics)" {
-    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash ---
+    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash username=ailinux hostname=ailinux
     initrd /casper/initrd
 }
 
