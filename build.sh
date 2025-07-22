@@ -489,7 +489,7 @@ sequence:
   - show: [finished]
 SETTINGS
 
-        # Branding configuration
+        # Branding configuration (FIXED: Added slideshow)
         mkdir -p /etc/calamares/branding/ailinux
         cat > /etc/calamares/branding/ailinux/branding.desc << 'BRANDING'
 componentName: ailinux
@@ -511,6 +511,8 @@ style:
     sidebarBackground: '#2c3e50'
     sidebarText: '#ffffff'
     sidebarTextSelect: '#3498db'
+slideshow: show.qml
+slideshowAPI: 2
 BRANDING
 
         # Copy branding images if available
@@ -523,14 +525,93 @@ BRANDING
             convert -size 256x256 xc:'#3498db' -pointsize 24 -fill white -gravity center -annotate +0+0 'AILinux' /etc/calamares/branding/ailinux/logo.png
         fi
         
+        # Copy missing images from logo if they don't exist
+        if [ ! -f '/etc/calamares/branding/ailinux/icon.png' ]; then
+            cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/icon.png
+        fi
+        
+        if [ ! -f '/etc/calamares/branding/ailinux/welcome.png' ]; then
+            cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/welcome.png
+        fi
+        
+        # Create a simple slideshow QML file
+        cat > /etc/calamares/branding/ailinux/show.qml << 'SLIDESHOW'
+import QtQuick 2.5
+import calamares.slideshow 1.0
+
+Presentation {
+    id: presentation
+    
+    Slide {
+        anchors.fill: parent
+        
+        Image {
+            id: background
+            source: "welcome.png"
+            width: parent.width
+            height: parent.height
+            fillMode: Image.PreserveAspectFit
+            anchors.centerIn: parent
+        }
+        
+        Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 200
+            text: "Welcome to AILinux 24.04 Premium!"
+            font.pixelSize: 24
+            color: "white"
+            font.weight: Font.Bold
+        }
+    }
+    
+    Slide {
+        anchors.fill: parent
+        
+        Rectangle {
+            anchors.fill: parent
+            color: "#2c3e50"
+        }
+        
+        Text {
+            anchors.centerIn: parent
+            width: parent.width * 0.8
+            text: "AILinux includes an AI-powered system assistant.\\nType 'aihelp' in the terminal to start."
+            font.pixelSize: 20
+            color: "white"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+    }
+    
+    Slide {
+        anchors.fill: parent
+        
+        Rectangle {
+            anchors.fill: parent
+            color: "#3498db"
+        }
+        
+        Text {
+            anchors.centerIn: parent
+            width: parent.width * 0.8
+            text: "Installation will take a few minutes.\\nPlease wait while we set up your system."
+            font.pixelSize: 20
+            color: "white"
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+    }
+}
+SLIDESHOW
+        
         # Welcome module
         cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
 showSupportUrl: true
 showKnownIssuesUrl: false
 showReleaseNotesUrl: false
 requirements:
-    requiredStorage: 5.5
-    requiredRam: 1.0
+    requiredStorage: 10
+    requiredRam: 2
     internetCheckUrl: http://google.com
     checkHasInternetConnection: false
 WELCOME
@@ -574,7 +655,10 @@ POSTINSTALL
 
 # Copy AI helper configuration
 if [ -f /opt/ailinux/.env ]; then
+    mkdir -p /target/opt/ailinux
     cp /opt/ailinux/.env /target/opt/ailinux/.env
+    cp /opt/ailinux/ailinux-helper.py /target/opt/ailinux/ailinux-helper.py
+    ln -sf /opt/ailinux/ailinux-helper.py /target/usr/local/bin/aihelp
 fi
 
 # Enable services in target system
