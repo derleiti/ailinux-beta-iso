@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v20.2 - Complete Production Version
+# AILinux ISO Build Script v20.3 - Complete Production Version
 # Creates a bootable Live ISO of AILinux based on Ubuntu 24.04 (Noble Numbat)
 #
 # Features:
@@ -8,8 +8,8 @@
 # - Robust chroot environment to avoid service errors
 # - AI-powered self-debugging on failures
 # - Complete KDE Plasma desktop with applications
-# - Calamares installer with custom branding
-# - UEFI + BIOS boot support
+# - Calamares installer with custom branding (FIXED)
+# - UEFI + BIOS boot support with Secure Boot
 # - AI helper integration via Mixtral API
 # - AILinux mirror support for faster downloads
 #
@@ -81,13 +81,13 @@ ai_debugger() {
     local system_prompt="You are an expert-level Linux distribution build-system debugger. A user's build script has failed. Analyze the complete build.log provided. Identify the exact point of failure and provide a clear, actionable solution. Structure your response in German as follows:\n\n### 🚨 Fehleranalyse\nPrecise description of which command failed and why.\n\n### ✅ Lösungsvorschlag\nConcrete, step-by-step plan to fix the problem. If code needs to be changed, provide the exact corrected code block."
     
     local log_content
-    log_content=$(tail -n 200 "${LOG_FILE}" | jq -Rs .)
+    log_content=$(tail -n 200 "${LOG_FILE}" | jq -Rs . 2>/dev/null || echo '"Log analysis failed"')
 
     local json_payload
     json_payload=$(jq -n \
                    --arg sp "$system_prompt" \
                    --arg lc "$log_content" \
-                   '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}')
+                   '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}' 2>/dev/null || echo '{}')
 
     log_ai "Performing analysis... This may take a moment."
     
@@ -95,10 +95,10 @@ ai_debugger() {
     ai_response=$(curl -s -X POST "https://api.mistral.ai/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
-        -d "$json_payload")
+        -d "$json_payload" 2>/dev/null || echo '{"choices":[{"message":{"content":"Analysis failed"}}]}')
 
     local analysis
-    analysis=$(echo "$ai_response" | jq -r '.choices[0].message.content // "Analysis failed"')
+    analysis=$(echo "$ai_response" | jq -r '.choices[0].message.content // "Analysis failed"' 2>/dev/null || echo "Analysis failed")
 
     echo
     log_ai "AI Analysis Result:"
@@ -119,7 +119,7 @@ check_not_root() {
 }
 
 check_dependencies() {
-    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "gnupg" "git" "curl" "jq")
+    local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "gnupg" "git" "curl" "jq" "python3" "python3-pip")
     local missing=()
     
     for dep in "${dependencies[@]}"; do
@@ -141,7 +141,7 @@ run_in_chroot() {
         HOME=/root \
         TERM="$TERM" \
         PS1='(ailinux-chroot) \u:\w\$ ' \
-        PATH=/usr/bin:/usr/sbin:/bin:/sbin \
+        PATH=/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin \
         DEBIAN_FRONTEND=noninteractive \
         LANG=en_US.UTF-8 \
         LC_ALL=en_US.UTF-8 \
@@ -228,24 +228,30 @@ EOF
         apt-get update
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
 
-        # Add Microsoft VS Code repository (fixed version)
+        # Add AILinux repository (after curl/wget are installed)
+        echo 'Adding AILinux custom repository...'
+        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash || {
+            echo 'Warning: AILinux repo script not available, continuing without it...'
+        }
+
+        # Add Microsoft VS Code repository
         echo 'Adding Microsoft VS Code repository...'
         curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
         echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
 
-        # Add AILinux repository (this script will also handle external repos like Chrome, Wine, etc.)
-        echo 'Adding AILinux custom repository and other external sources...'
-        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash || {
-            echo 'Warning: AILinux repo script not available, continuing without it...'
-        }
-        
-        # Switch to AILinux mirror for faster downloads
-        echo 'Switching to AILinux mirror for faster downloads...'
-        sed -i 's|http://archive.ubuntu.com/ubuntu/|https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
-        sed -i 's|http://security.ubuntu.com/ubuntu/|https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+        # Add Google Chrome repository
+        echo 'Adding Google Chrome repository...'
+        curl -sSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+        echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main' | tee /etc/apt/sources.list.d/google-chrome.list
+
+        # Add Wine repository
+        echo 'Adding Wine repository...'
+        curl -sSL https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg
+        echo 'deb [arch=amd64,i386 signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main' | tee /etc/apt/sources.list.d/winehq.list
         
         # Setup locales
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
+        echo 'de_DE.UTF-8 UTF-8' >> /etc/locale.gen
         locale-gen
         update-locale LANG=en_US.UTF-8
         
@@ -272,14 +278,15 @@ step_03_install_packages() {
             plymouth-theme-spinner ubuntu-standard \
             keyboard-configuration console-setup \
             sudo systemd systemd-sysv dbus init rsyslog \
-            systemd-coredump grub-efi-amd64 shim-signed
+            systemd-coredump grub-efi-amd64 shim-signed \
+            initramfs-tools live-boot
         
         # Install complete KDE desktop
         apt-get install -y \
             kde-full plasma-desktop sddm-theme-breeze \
-            xorg xinit x11-xserver-utils
+            xorg xinit x11-xserver-utils xserver-xorg-video-all
         
-        # Install applications (note: spectacle is included in kde-full as kde-spectacle)
+        # Install core applications
         apt-get install -y \
             firefox thunderbird vlc gimp \
             libreoffice libreoffice-l10n-en-us \
@@ -287,31 +294,39 @@ step_03_install_packages() {
             gwenview ark dolphin \
             ubuntu-restricted-extras ffmpeg \
             pulseaudio pulseaudio-utils pavucontrol \
-            git build-essential \
-            python3 python3-pip python3-venv \
+            git build-essential cmake \
+            python3 python3-pip python3-venv python3-dev \
             nodejs npm default-jdk \
             linux-firmware bluez bluetooth \
             wpasupplicant printer-driver-all cups \
-            jq tree vim nano curl wget \
-            software-properties-common apt-transport-https
+            jq tree vim nano curl wget unzip zip \
+            software-properties-common apt-transport-https \
+            filezilla
         
-        # Try to install optional packages
+        # Install optional packages with error handling
         echo 'Installing optional packages...'
         
-        # Google Chrome (if repo is available)
+        # Google Chrome
         apt-get install -y google-chrome-stable || {
-            echo 'Google Chrome not available, skipping...'
+            echo 'Google Chrome installation failed, trying alternative method...'
+            wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb || true
+            if [ -f /tmp/chrome.deb ]; then
+                dpkg -i /tmp/chrome.deb || apt-get install -f -y
+                rm -f /tmp/chrome.deb
+            fi
         }
         
-        # Wine (if repo is available)
+        # Wine
         apt-get install -y winehq-staging winetricks || {
-            echo 'Wine not available, skipping...'
+            echo 'Wine installation failed, trying alternative approach...'
+            apt-get install -y wine wine32 wine64 winetricks || {
+                echo 'Wine installation completely failed, skipping...'
+            }
         }
         
-        # VS Code (from Microsoft repository)
+        # VS Code
         apt-get install -y code || {
-            echo 'VS Code not available, skipping...'
-            # Try alternative method
+            echo 'VS Code installation failed, trying direct download...'
             wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb || true
             if [ -f /tmp/vscode.deb ]; then
                 dpkg -i /tmp/vscode.deb || apt-get install -f -y
@@ -359,22 +374,35 @@ class AILinuxHelper:
             sys.exit(1)
         
         self.api_url = 'https://api.mistral.ai/v1/chat/completions'
-        self.system_prompt = '''You are an expert-level Linux system administrator and debugging assistant. Your name is AILinux Helper.
+        self.system_prompt = '''Du bist AILinux Helper – ein KI-gesteuerter Assistent, der in der Linux-Distribution „AILinux 24.04 Premium" eingebettet ist.
 
-Your primary task is to analyze system logs, error messages, or user queries provided to you. Based on the input, you must provide a concise, accurate, and helpful analysis.
+Diese Distribution basiert auf Ubuntu 24.04 (Codename: Noble) und wurde speziell für eine moderne, KI-integrierte Offline-Nutzung entwickelt.
+Dein Interface ist das Kommandozeilentool aihelp.
 
-When a user provides you with an error log or a problem description, you MUST respond with the following structure, using Markdown formatting:
+## 🎯 Deine Aufgabe
+
+Du wirst direkt über das Terminal vom Nutzer aufgerufen, um:
+
+- Fehlermeldungen und Logs zu analysieren
+- technische Probleme zu erklären
+- Lösungen bereitzustellen, z. B. Shell-Befehle oder Systemhinweise
+- Hilfe zur Nutzung und Konfiguration von AILinux zu leisten
+
+## 📋 Antwortformat (immer verwenden)
 
 ### 🚨 Problem Summary
-A brief, one-sentence summary of the core issue.
+*Kurzbeschreibung des gemeldeten oder erkannten Problems.*
 
 ### ⚙ Likely Cause
-Your detailed analysis of the root cause of the error or problem. Explain the technical details clearly.
+*Technische Erklärung der wahrscheinlichen Ursache – inkl. Log-Analyse, Abhängigkeiten, Services etc.*
 
 ### ✅ Suggested Solution
-A clear, step-by-step command, code snippet, or action the user can take to resolve the issue. If you provide a command, enclose it in a shell code block.
+*Konkrete Lösung als Shell-Befehl(e) oder Beschreibung.*
 
-Always be helpful and accurate. If the provided information is insufficient for a full analysis, state what additional information you need. Do not invent commands or file paths if you are uncertain.'''
+Falls zu wenig Informationen gegeben sind, antworte mit:
+"Bitte gib mir mehr Details wie Logs, konkrete Fehlermeldungen oder betroffene Befehle."
+
+AILinux enthält: kde-full, firefox, chrome, thunderbird, vlc, gimp, libreoffice, wine, vscode, python3, nodejs, und viele andere Pakete.'''
 
     def analyze_problem(self, user_input):
         headers = {
@@ -475,56 +503,111 @@ step_05_configure_calamares() {
     run_in_chroot "
         set -e
         # Install Calamares and dependencies
-        apt-get install -y calamares python3-pyqt5 python3-yaml python3-parted imagemagick || {
+        apt-get install -y calamares calamares-settings-ubuntu python3-pyqt5 python3-yaml python3-parted imagemagick || {
             echo 'Warning: Some Calamares packages not available, trying minimal installation...'
             apt-get install -y calamares || {
-                echo 'Calamares not available in repositories, installing from source...'
-                # Alternative: Download and install Calamares deb package
-                wget -q https://github.com/calamares/calamares/releases/download/v3.3.1/calamares_3.3.1-1_amd64.deb -O /tmp/calamares.deb || {
-                    echo 'Failed to download Calamares, skipping installer configuration...'
-                    exit 0
-                }
-                dpkg -i /tmp/calamares.deb || apt-get install -f -y
-                rm -f /tmp/calamares.deb
+                echo 'Calamares not available in repositories'
+                exit 0
             }
         }
         
         # Create Calamares configuration
         mkdir -p /etc/calamares/modules
         
-        # Main settings
+        # Main settings - CORRECTED VERSION
         cat > /etc/calamares/settings.conf << 'SETTINGS'
-branding: ailinux
+---
+modules-search: [ local ]
+
+instances:
+- id:       rootfs
+  module:   unpackfs
+  config:   unpackfs.conf
+
+- id:       vmlinuz
+  module:   unpackfs
+  config:   unpackfs.conf
+
 sequence:
-  - show: [welcome, locale, keyboard, partition, users, summary]
-  - exec: [partition, mount, unpackfs, machineid, fstab, locale, keyboard, localecfg, users, displaymanager, networkcfg, hwclock, services-systemd, bootloader, postinstall, umount]
-  - show: [finished]
+- show:
+  - welcome
+  - locale
+  - keyboard
+  - partition
+  - users
+  - summary
+- exec:
+  - partition
+  - mount
+  - unpackfs@rootfs
+  - machineid
+  - fstab
+  - locale
+  - keyboard
+  - localecfg
+  - users
+  - displaymanager
+  - networkcfg
+  - hwclock
+  - services-systemd
+  - bootloader
+  - postinstall
+  - umount
+- show:
+  - finished
+
+branding: ailinux
+
+prompt-install: false
+
+dont-chroot: false
+
+oem-setup: false
+
+disable-cancel: false
+
+disable-cancel-during-exec: false
+
+quit-at-end: false
 SETTINGS
 
-        # Branding configuration (FIXED: Added slideshow)
+        # CORRECTED Branding configuration
         mkdir -p /etc/calamares/branding/ailinux
         cat > /etc/calamares/branding/ailinux/branding.desc << 'BRANDING'
-componentName: ailinux
+---
+componentName:  ailinux
+
 strings:
-    productName: AILinux
-    shortProductName: AILinux
-    version: 24.04 Premium
-    shortVersion: 24.04
-    versionedName: AILinux 24.04 Premium
-    shortVersionedName: AILinux 24.04
+    productName:         AILinux
+    shortProductName:    AILinux
+    version:             24.04 Premium
+    shortVersion:        24.04
+    versionedName:       AILinux 24.04 Premium
+    shortVersionedName:  AILinux 24.04
     bootloaderEntryName: AILinux
-    productUrl: https://github.com/derleiti/ailinux-beta-iso
-    supportUrl: https://github.com/derleiti/ailinux-beta-iso/issues
+    productUrl:          https://github.com/derleiti/ailinux-beta-iso
+    supportUrl:          https://github.com/derleiti/ailinux-beta-iso/issues
+    bugReportUrl:        https://github.com/derleiti/ailinux-beta-iso/issues
+    releaseNotesUrl:     https://github.com/derleiti/ailinux-beta-iso/releases
+
 images:
-    productLogo: logo.png
-    productIcon: icon.png
-    productWelcome: welcome.png
+    productLogo:         "logo.png"
+    productIcon:         "icon.png"
+    productWelcome:      "welcome.png"
+
 style:
-    sidebarBackground: '#2c3e50'
-    sidebarText: '#ffffff'
-    sidebarTextSelect: '#3498db'
-slideshow: show.qml
+   sidebarBackground:    "#2c3e50"
+   sidebarText:          "#ffffff"
+   sidebarTextSelect:    "#3498db"
+   sidebarTextCurrent:   "#ffffff"
+
+slideshow:               "show.qml"
+
 slideshowAPI: 2
+
+uploadServer:
+    type:    "fiche"
+    url:     "http://termbin.com:9999"
 BRANDING
 
         # Copy branding images if available
@@ -546,7 +629,7 @@ BRANDING
             cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/welcome.png
         fi
         
-        # Create a simple slideshow QML file
+        # Create CORRECTED slideshow QML file
         cat > /etc/calamares/branding/ailinux/show.qml << 'SLIDESHOW'
 import QtQuick 2.5
 import calamares.slideshow 1.0
@@ -557,22 +640,37 @@ Presentation {
     Slide {
         anchors.fill: parent
         
+        Rectangle {
+            anchors.fill: parent
+            color: "#2c3e50"
+        }
+        
         Image {
             id: background
             source: "welcome.png"
-            width: parent.width
-            height: parent.height
+            width: 200
+            height: 200
             fillMode: Image.PreserveAspectFit
-            anchors.centerIn: parent
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: 50
         }
         
         Text {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: 200
-            text: "Welcome to AILinux 24.04 Premium!"
-            font.pixelSize: 24
+            text: "Willkommen zu AILinux 24.04 Premium!"
+            font.pixelSize: 28
             color: "white"
             font.weight: Font.Bold
+        }
+        
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 50
+            text: "Ihre KI-gestützte Linux-Distribution"
+            font.pixelSize: 18
+            color: "#3498db"
         }
     }
     
@@ -581,17 +679,28 @@ Presentation {
         
         Rectangle {
             anchors.fill: parent
-            color: "#2c3e50"
+            color: "#34495e"
         }
         
-        Text {
+        Column {
             anchors.centerIn: parent
-            width: parent.width * 0.8
-            text: "AILinux includes an AI-powered system assistant.\\nType 'aihelp' in the terminal to start."
-            font.pixelSize: 20
-            color: "white"
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
+            spacing: 20
+            
+            Text {
+                text: "🧠 KI-Integration"
+                font.pixelSize: 24
+                color: "#3498db"
+                font.weight: Font.Bold
+            }
+            
+            Text {
+                width: 400
+                text: "AILinux enthält einen AI-Assistant.\\nVerwenden Sie 'aihelp' im Terminal für:\\n\\n• Systemdiagnose\\n• Fehlerbehebung\\n• Log-Analyse\\n• Technischen Support"
+                font.pixelSize: 16
+                color: "white"
+                horizontalAlignment: Text.AlignCenter
+                wrapMode: Text.WordWrap
+            }
         }
     }
     
@@ -603,14 +712,55 @@ Presentation {
             color: "#3498db"
         }
         
-        Text {
+        Column {
             anchors.centerIn: parent
-            width: parent.width * 0.8
-            text: "Installation will take a few minutes.\\nPlease wait while we set up your system."
-            font.pixelSize: 20
-            color: "white"
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
+            spacing: 20
+            
+            Text {
+                text: "⚙️ Vollständige Desktop-Umgebung"
+                font.pixelSize: 24
+                color: "white"
+                font.weight: Font.Bold
+            }
+            
+            Text {
+                width: 500
+                text: "• KDE Plasma Desktop\\n• Firefox & Chrome\\n• LibreOffice Suite\\n• GIMP & VLC\\n• Visual Studio Code\\n• Wine für Windows-Apps\\n• Entwickler-Tools"
+                font.pixelSize: 16
+                color: "white"
+                horizontalAlignment: Text.AlignCenter
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+    
+    Slide {
+        anchors.fill: parent
+        
+        Rectangle {
+            anchors.fill: parent
+            color: "#27ae60"
+        }
+        
+        Column {
+            anchors.centerIn: parent
+            spacing: 20
+            
+            Text {
+                text: "🚀 Installation läuft..."
+                font.pixelSize: 28
+                color: "white"
+                font.weight: Font.Bold
+            }
+            
+            Text {
+                width: 400
+                text: "AILinux wird auf Ihrem System installiert.\\nDies kann einige Minuten dauern.\\n\\nNach der Installation steht Ihnen\\nder aihelp-Befehl zur Verfügung."
+                font.pixelSize: 16
+                color: "white"
+                horizontalAlignment: Text.AlignCenter
+                wrapMode: Text.WordWrap
+            }
         }
     }
 }
@@ -618,46 +768,120 @@ SLIDESHOW
         
         # Welcome module (increased storage requirement)
         cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
-showSupportUrl: true
-showKnownIssuesUrl: false
-showReleaseNotesUrl: false
+---
+showSupportUrl:         true
+showKnownIssuesUrl:     false
+showReleaseNotesUrl:    true
+showDonateUrl:          false
+
 requirements:
-    requiredStorage: 15
-    requiredRam: 2
-    internetCheckUrl: http://google.com
+    requiredStorage:    20.0
+    requiredRam:        2.0
+    internetCheckUrl:   http://google.com
     checkHasInternetConnection: false
+
+geoip:
+    style:    "none"
+    url:      ""
+    selector: ""
+
+lnf:
+    defaultLnF:     org.kde.breeze.desktop
+    lnfPath:        /usr/share/plasma/look-and-feel/
+    showAll:        false
 WELCOME
 
-        # Users module
+        # Users module configuration
         cat > /etc/calamares/modules/users.conf << 'USERS'
+---
 defaultGroups:
-    - cdrom
-    - floppy
-    - sudo
-    - audio
-    - dip
-    - video
-    - plugdev
-    - netdev
-    - bluetooth
-    - lpadmin
-autologinGroup: autologin
-doAutologin: false
-sudoersGroup: sudo
+    - name: cdrom
+      must_exist: false
+    - name: floppy  
+      must_exist: false
+    - name: sudo
+      must_exist: true
+    - name: audio
+      must_exist: false
+    - name: dip
+      must_exist: false
+    - name: video
+      must_exist: false
+    - name: plugdev
+      must_exist: false
+    - name: netdev
+      must_exist: false
+    - name: bluetooth
+      must_exist: false
+    - name: lpadmin
+      must_exist: false
+
+autologinGroup:  autologin
+sudoersGroup:    sudo
 setRootPassword: false
-doReusePassword: false
+doReusePassword: true
+
+passwordRequirements:
+    minLength: 4
+    maxLength: -1
+
+allowWeakPasswords: true
+allowWeakPasswordsDefault: true
+
+userShell: /bin/bash
+
+hostname:
+    location: EtcFile
+    writeHostsFile: true
+    template: "ailinux-${cpu}"
 USERS
+
+        # Unpackfs configuration
+        cat > /etc/calamares/modules/unpackfs.conf << 'UNPACKFS'
+---
+unpack:
+    -   source: "/cdrom/casper/filesystem.squashfs"
+        sourcefs: "squashfs"
+        destination: ""
+        
+exclude: [ "dev/*", "proc/*", "sys/*", "tmp/*", "run/*", "mnt/*", "media/*", "lost+found", "cdrom/*", "swapfile" ]
+
+excludeFile: false
+UNPACKFS
 
         # Finished module
         cat > /etc/calamares/modules/finished.conf << 'FINISHED'
+---
 restartNowEnabled: true
 restartNowChecked: false
 notifyOnFinished: true
 FINISHED
 
-        # Post-install script
+        # Display manager configuration
+        cat > /etc/calamares/modules/displaymanager.conf << 'DISPLAYMGR'
+---
+displaymanagers:
+  - sddm
+  - lightdm
+  - gdm
+
+defaultDesktopEnvironment:
+    executable: "startkde"
+    desktopFile: "plasma"
+
+basicSetup: false
+
+sysconfigSetup: false
+DISPLAYMGR
+
+        # Post-install script configuration
         cat > /etc/calamares/modules/postinstall.conf << 'POSTINSTALL'
-script: /usr/local/bin/ailinux-postinstall.sh
+---
+dontChroot: false
+timeout: 999
+script:
+ - command: "/usr/local/bin/ailinux-postinstall.sh"
+   timeout: 999
 POSTINSTALL
 
         # Create post-install script
@@ -665,12 +889,16 @@ POSTINSTALL
 #!/bin/bash
 # AILinux Post-Installation Script
 
+echo "Starting AILinux post-installation configuration..."
+
 # Copy AI helper configuration
 if [ -f /opt/ailinux/.env ]; then
     mkdir -p /target/opt/ailinux
     cp /opt/ailinux/.env /target/opt/ailinux/.env
     cp /opt/ailinux/ailinux-helper.py /target/opt/ailinux/ailinux-helper.py
-    ln -sf /opt/ailinux/ailinux-helper.py /target/usr/local/bin/aihelp
+    chmod +x /target/opt/ailinux/ailinux-helper.py
+    chroot /target ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
+    echo "AI helper configured in target system."
 fi
 
 # Enable services in target system
@@ -678,24 +906,50 @@ chroot /target systemctl enable sddm || true
 chroot /target systemctl enable NetworkManager || true
 chroot /target systemctl enable bluetooth || true
 chroot /target systemctl enable cups || true
+chroot /target systemctl disable systemd-resolved || true
 
 # Create welcome message
 cat > /target/etc/motd << EOF
 
-Welcome to AILinux 24.04 Premium!
+██╗    ██╗███████╗██╗      ██████╗ ██████╗ ███╗   ███╗███████╗    ████████╗ ██████╗ 
+██║    ██║██╔════╝██║     ██╔════╝██╔═══██╗████╗ ████║██╔════╝    ╚══██╔══╝██╔═══██╗
+██║ █╗ ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║█████╗         ██║   ██║   ██║
+██║███╗██║██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║██╔══╝         ██║   ██║   ██║
+╚███╔███╔╝███████╗███████╗╚██████╗╚██████╔╝██║ ╚═╝ ██║███████╗       ██║   ╚██████╔╝
+ ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝       ╚═╝    ╚═════╝ 
+                                                                                      
+             █████╗ ██╗██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
+            ██╔══██╗██║██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
+            ███████║██║██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
+            ██╔══██║██║██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
+            ██║  ██║██║███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
+            ╚═╝  ╚═╝╚═╝╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
+                                                              
+                    🧠 KI-gestützte Linux-Distribution 🧠
 
-Type 'aihelp' to start the AI assistant.
-Type 'aihelp --sysinfo' to see system information.
+Willkommen bei AILinux 24.04 Premium!
 
-For more information, visit: https://github.com/derleiti/ailinux-beta-iso
+🚀 Erste Schritte:
+  • Verwenden Sie 'aihelp' für KI-gestützte Systemhilfe
+  • Nutzen Sie 'aihelp --sysinfo' für Systeminformationen  
+  • Bei Problemen: 'aihelp "Ihr Problem hier beschreiben"'
+
+📚 Mehr Informationen: https://github.com/derleiti/ailinux-beta-iso
+🐛 Support: https://github.com/derleiti/ailinux-beta-iso/issues
 
 EOF
 
-echo 'AILinux post-installation completed.'
+# Set correct permissions
+chroot /target chown root:root /etc/motd
+chroot /target chmod 644 /etc/motd
+
+echo "AILinux post-installation completed successfully."
 POSTSCRIPT
         chmod +x /usr/local/bin/ailinux-postinstall.sh
+        
+        echo "Calamares configuration completed successfully."
     "
-    log_success "Calamares installer configured."
+    log_success "Calamares installer configured with corrected branding.desc."
 }
 
 step_06_create_live_user() {
@@ -714,15 +968,26 @@ step_06_create_live_user() {
 [Autologin]
 User=${LIVE_USER}
 Session=plasma
+
+[Theme]
+Current=breeze
+
+[X11]
+ServerPath=/usr/bin/X
+SessionCommand=/usr/share/sddm/scripts/Xsession
+SessionDir=/usr/share/xsessions
 EOF
         
         # Create desktop shortcut for installer
         mkdir -p '/home/${LIVE_USER}/Desktop'
         cat > '/home/${LIVE_USER}/Desktop/install-ailinux.desktop' << EOF
 [Desktop Entry]
+Version=1.0
 Type=Application
 Name=Install AILinux
+Name[de]=AILinux installieren
 Comment=Install AILinux to your computer
+Comment[de]=AILinux auf Ihrem Computer installieren
 Icon=calamares
 Exec=pkexec calamares
 Terminal=false
@@ -734,9 +999,12 @@ EOF
         # Create AI helper shortcut
         cat > '/home/${LIVE_USER}/Desktop/aihelp.desktop' << EOF
 [Desktop Entry]
+Version=1.0
 Type=Application
 Name=AILinux Helper
+Name[de]=AILinux Assistent
 Comment=AI-powered system assistant
+Comment[de]=KI-gestützter Systemassistent
 Icon=dialog-information
 Exec=konsole -e aihelp
 Terminal=true
@@ -749,8 +1017,9 @@ EOF
         cat >> '/home/${LIVE_USER}/.bashrc' << EOF
 
 # AILinux Welcome
-echo 'Welcome to AILinux 24.04 Premium!'
-echo 'Type \"aihelp\" to start the AI assistant.'
+echo ''
+echo '🧠 Willkommen bei AILinux 24.04 Premium!'
+echo 'Verwenden Sie \"aihelp\" für KI-gestützte Systemhilfe.'
 echo ''
 EOF
         
@@ -784,6 +1053,9 @@ step_07_system_cleanup() {
         
         # Remove SSH host keys (will be regenerated on first boot)
         rm -f /etc/ssh/ssh_host_*
+        
+        # Update initramfs
+        update-initramfs -u
     "
     
     # Clean up resolv.conf before unmounting
@@ -809,15 +1081,15 @@ step_08_create_squashfs() {
     run_in_chroot "dpkg-query -W --showformat='\\\${Package}\t\\\${Version}\n'" > "${ISO_DIR}/casper/filesystem.manifest"
     
     log_info "Creating SquashFS image with zstd compression (this may take a while)..."
-    log_info "Using higher block size for larger image..."
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" \
-        -noappend -e boot -comp zstd -b 2M -Xcompression-level 12
+        -noappend -e boot -comp zstd -b 1M -Xcompression-level 15 -processors $(nproc)
     
     # Create filesystem size file
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
     
     # Create disk info
-    echo "${DISTRO_NAME} ${DISTRO_VERSION} - Release ${ARCHITECTURE}" > "${ISO_DIR}/.disk/info"
+    echo "${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION} - Release ${ARCHITECTURE}" > "${ISO_DIR}/.disk/info"
+    touch "${ISO_DIR}/.disk/base_installable"
     
     log_success "SquashFS image created successfully."
     log_info "SquashFS size: $(du -h "${ISO_DIR}/casper/filesystem.squashfs" | cut -f1)"
@@ -844,6 +1116,11 @@ LABEL live
   KERNEL /casper/vmlinuz
   APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash ---
 
+LABEL live-safe
+  MENU LABEL Try ${DISTRO_NAME} (safe graphics)
+  KERNEL /casper/vmlinuz
+  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd nomodeset quiet splash ---
+
 LABEL memtest
   MENU LABEL Memory Test
   KERNEL /install/memtest86+.bin
@@ -869,6 +1146,11 @@ menuentry "Try or Install ${DISTRO_NAME}" {
 
 menuentry "Try ${DISTRO_NAME} (safe graphics)" {
     linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash ---
+    initrd /casper/initrd
+}
+
+menuentry "Check disc for defects" {
+    linux /casper/vmlinuz boot=casper integrity-check quiet splash ---
     initrd /casper/initrd
 }
 EOF
@@ -903,10 +1185,11 @@ EOF
 step_10_create_iso() {
     log_step "10/10" "Create Final ISO Image"
     
-    log_info "Creating hybrid ISO image..."
+    log_info "Creating hybrid ISO image with enhanced options..."
     sudo xorriso -as mkisofs \
         -o "${BUILD_DIR}/${ISO_NAME}" \
-        -V "${DISTRO_NAME}" \
+        -V "${DISTRO_NAME}_$(echo ${DISTRO_VERSION} | tr . _)" \
+        -A "${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}" \
         -iso-level 3 -r -J -l \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
@@ -914,6 +1197,7 @@ step_10_create_iso() {
         -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot \
         -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
         -isohybrid-gpt-basdat \
+        -isohybrid-apm-hfsplus \
         "${ISO_DIR}"
 
     # Fix permissions and move to final location
@@ -936,17 +1220,27 @@ ISO Size: $(du -h "${final_iso_path}" | cut -f1)
 
 Features:
 - Ubuntu ${DISTRO_VERSION} LTS base
-- KDE Plasma Desktop
-- Calamares Installer
+- KDE Plasma Desktop (kde-full)
+- Calamares Installer with custom branding
 - AI-powered System Helper (aihelp command)
-- Mixtral AI integration
+- Mixtral AI integration via API
 - Premium application suite
-- AILinux mirror for fast downloads
+- BIOS and UEFI boot support with Secure Boot
+- zstd compressed SquashFS
+
+Included Software:
+- Desktop: KDE Plasma, SDDM, Konsole
+- Browsers: Firefox, Google Chrome
+- Office: LibreOffice Suite
+- Media: VLC, GIMP
+- Development: VS Code, Git, Python, Node.js, JDK
+- Windows Support: Wine, Winetricks
+- System Tools: GParted, Htop, NetworkManager
 
 Usage:
 - Boot from USB/DVD to try ${DISTRO_NAME}
 - Use "aihelp" command for AI assistance
-- Install using the desktop installer
+- Install using the desktop installer (Calamares)
 
 For more information: https://github.com/derleiti/ailinux-beta-iso
 EOF
@@ -967,7 +1261,7 @@ main() {
     local start_time
     start_time=$(date +%s)
     
-    log_info "==================== AILinux ISO Build v20.2 ===================="
+    log_info "==================== AILinux ISO Build v20.3 ===================="
     log_info "Starting build process for ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     
     step_01_setup
@@ -990,6 +1284,7 @@ main() {
     log_success "ISO: $(realpath "${ISO_NAME}")"
     log_success "Build time: $((duration / 60)) minutes and $((duration % 60)) seconds"
     log_success "You can now boot the ISO in a VM or write it to a USB drive."
+    log_info "To test: qemu-system-x86_64 -cdrom ${ISO_NAME} -m 4096 -enable-kvm"
     log_warn "The build directory '${BUILD_DIR}' has been kept for inspection."
     log_info "To clean up: ./clean.sh"
 }
