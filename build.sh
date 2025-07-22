@@ -220,138 +220,154 @@ EOF
     sudo mount --bind /run "${CHROOT_DIR}/run"
     sudo cp /etc/resolv.conf "${CHROOT_DIR}/etc/"
 
-    run_in_chroot "
-        set -e
-        echo '${LIVE_HOSTNAME}' > /etc/hostname
-        
-        # Configure basic locale and APT
-        apt-get update
-        apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
+    # Create bootstrap script file to avoid complex heredoc
+    cat > /tmp/bootstrap_repos.sh << 'BOOTSTRAP_EOF'
+#!/bin/bash
+set -e
+echo 'ailinux' > /etc/hostname
 
-        # Add AILinux repository (after curl/wget are installed)
-        # This script also adds Wine, KDE Neon, and Google Chrome repositories
-        echo 'Adding AILinux repository and external sources...'
-        if curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash; then
-            echo 'AILinux repository and external sources added successfully.'
-        else
-            echo 'Warning: AILinux repo script not available, continuing without it...'
-        fi
+# Configure basic locale and APT
+apt-get update
+apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
 
-        # Add Microsoft VS Code repository (not included in AILinux script)
-        echo 'Adding Microsoft VS Code repository...'
-        curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
-        echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
-        
-        # Setup locales
-        echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
-        echo 'de_DE.UTF-8 UTF-8' >> /etc/locale.gen
-        locale-gen
-        update-locale LANG=en_US.UTF-8
-        
-        # Enable i386 architecture for Wine (required before final apt update)
-        dpkg --add-architecture i386
-        
-        # Final update to fetch all package lists from all configured sources
-        apt-get update
-    "
+# Add AILinux repository and external sources (Wine, Chrome, KDE Neon)
+echo 'Adding AILinux repository and external sources...'
+curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
+if [ $? -eq 0 ]; then
+    echo 'AILinux repository and external sources added successfully.'
+else
+    echo 'Warning: AILinux repo script not available, continuing without it...'
+fi
+
+# Add Microsoft VS Code repository
+echo 'Adding Microsoft VS Code repository...'
+curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
+echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
+
+# Setup locales
+echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
+echo 'de_DE.UTF-8 UTF-8' >> /etc/locale.gen
+locale-gen
+update-locale LANG=en_US.UTF-8
+
+# Enable i386 architecture for Wine
+dpkg --add-architecture i386
+
+# Final update to fetch all package lists
+apt-get update
+BOOTSTRAP_EOF
+
+    sudo cp /tmp/bootstrap_repos.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/bootstrap_repos.sh"
+    run_in_chroot "/tmp/bootstrap_repos.sh"
+    sudo rm "${CHROOT_DIR}/tmp/bootstrap_repos.sh" /tmp/bootstrap_repos.sh
+    
     log_success "Base system and repositories configured."
 }
 
 step_03_install_packages() {
     log_step "3/10" "Install Core Packages, Kernel, and Desktop Environment"
     
-    run_in_chroot "
-        set -e
-        
-        # Install kernel and boot components
-        apt-get install -y \
-            linux-image-generic linux-headers-generic \
-            casper discover laptop-detect os-prober \
-            network-manager resolvconf net-tools wireless-tools \
-            plymouth-theme-spinner ubuntu-standard \
-            keyboard-configuration console-setup \
-            sudo systemd systemd-sysv dbus init rsyslog \
-            systemd-coredump grub-efi-amd64 shim-signed \
-            initramfs-tools live-boot
-        
-        # Install complete KDE desktop
-        apt-get install -y \
-            kde-full plasma-desktop sddm-theme-breeze \
-            xorg xinit x11-xserver-utils xserver-xorg-video-all
-        
-        # Install core applications
-        apt-get install -y \
-            firefox thunderbird vlc gimp \
-            libreoffice libreoffice-l10n-en-us \
-            gparted htop neofetch konsole kate okular \
-            gwenview ark dolphin \
-            ubuntu-restricted-extras ffmpeg \
-            pulseaudio pulseaudio-utils pavucontrol \
-            git build-essential cmake \
-            python3 python3-pip python3-venv python3-dev \
-            nodejs npm default-jdk \
-            linux-firmware bluez bluetooth \
-            wpasupplicant printer-driver-all cups \
-            jq tree vim nano curl wget unzip zip \
-            software-properties-common apt-transport-https \
-            filezilla
-        
-        # Install optional packages with simple error handling
-        echo 'Installing optional packages...'
-        
-        # Google Chrome
-        echo 'Trying to install Google Chrome...'
-        if apt-get install -y google-chrome-stable; then
-            echo 'Google Chrome installed successfully.'
+    # Create package installation script
+    cat > /tmp/install_packages.sh << 'PACKAGES_EOF'
+#!/bin/bash
+set -e
+
+# Install kernel and boot components
+apt-get install -y \
+    linux-image-generic linux-headers-generic \
+    casper discover laptop-detect os-prober \
+    network-manager resolvconf net-tools wireless-tools \
+    plymouth-theme-spinner ubuntu-standard \
+    keyboard-configuration console-setup \
+    sudo systemd systemd-sysv dbus init rsyslog \
+    systemd-coredump grub-efi-amd64 shim-signed \
+    initramfs-tools live-boot
+
+# Install complete KDE desktop
+apt-get install -y \
+    kde-full plasma-desktop sddm-theme-breeze \
+    xorg xinit x11-xserver-utils xserver-xorg-video-all
+
+# Install core applications
+apt-get install -y \
+    firefox thunderbird vlc gimp \
+    libreoffice libreoffice-l10n-en-us \
+    gparted htop neofetch konsole kate okular \
+    gwenview ark dolphin \
+    ubuntu-restricted-extras ffmpeg \
+    pulseaudio pulseaudio-utils pavucontrol \
+    git build-essential cmake \
+    python3 python3-pip python3-venv python3-dev \
+    nodejs npm default-jdk \
+    linux-firmware bluez bluetooth \
+    wpasupplicant printer-driver-all cups \
+    jq tree vim nano curl wget unzip zip \
+    software-properties-common apt-transport-https \
+    filezilla
+
+# Install optional packages with simple error handling
+echo 'Installing optional packages...'
+
+# Google Chrome
+echo 'Trying to install Google Chrome...'
+if apt-get install -y google-chrome-stable; then
+    echo 'Google Chrome installed successfully.'
+else
+    echo 'Google Chrome installation from repository failed, trying direct download...'
+    if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
+        if dpkg -i /tmp/chrome.deb; then
+            echo 'Google Chrome installed from direct download.'
         else
-            echo 'Google Chrome installation from repository failed, trying direct download...'
-            if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
-                if dpkg -i /tmp/chrome.deb; then
-                    echo 'Google Chrome installed from direct download.'
-                else
-                    echo 'Fixing broken dependencies...'
-                    apt-get install -f -y
-                fi
-                rm -f /tmp/chrome.deb
-            else
-                echo 'Google Chrome download failed, skipping...'
-            fi
+            echo 'Fixing broken dependencies...'
+            apt-get install -f -y
         fi
-        
-        # Wine
-        echo 'Trying to install Wine...'
-        if apt-get install -y winehq-staging winetricks; then
-            echo 'Wine staging installed successfully.'
+        rm -f /tmp/chrome.deb
+    else
+        echo 'Google Chrome download failed, skipping...'
+    fi
+fi
+
+# Wine
+echo 'Trying to install Wine...'
+if apt-get install -y winehq-staging winetricks; then
+    echo 'Wine staging installed successfully.'
+else
+    echo 'Wine staging failed, trying regular wine...'
+    if apt-get install -y wine wine32 wine64 winetricks; then
+        echo 'Regular Wine installed successfully.'
+    else
+        echo 'Wine installation completely failed, skipping...'
+    fi
+fi
+
+# VS Code
+echo 'Trying to install VS Code...'
+if apt-get install -y code; then
+    echo 'VS Code installed successfully.'
+else
+    echo 'VS Code installation from repository failed, trying direct download...'
+    if wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb; then
+        if dpkg -i /tmp/vscode.deb; then
+            echo 'VS Code installed from direct download.'
         else
-            echo 'Wine staging failed, trying regular wine...'
-            if apt-get install -y wine wine32 wine64 winetricks; then
-                echo 'Regular Wine installed successfully.'
-            else
-                echo 'Wine installation completely failed, skipping...'
-            fi
+            echo 'Fixing broken dependencies...'
+            apt-get install -f -y
         fi
-        
-        # VS Code
-        echo 'Trying to install VS Code...'
-        if apt-get install -y code; then
-            echo 'VS Code installed successfully.'
-        else
-            echo 'VS Code installation from repository failed, trying direct download...'
-            if wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb; then
-                if dpkg -i /tmp/vscode.deb; then
-                    echo 'VS Code installed from direct download.'
-                else
-                    echo 'Fixing broken dependencies...'
-                    apt-get install -f -y
-                fi
-                rm -f /tmp/vscode.deb
-            else
-                echo 'VS Code download failed, skipping...'
-            fi
-        fi
-        
-        echo 'Package installation completed.'
-    "
+        rm -f /tmp/vscode.deb
+    else
+        echo 'VS Code download failed, skipping...'
+    fi
+fi
+
+echo 'Package installation completed.'
+PACKAGES_EOF
+
+    sudo cp /tmp/install_packages.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/install_packages.sh"
+    run_in_chroot "/tmp/install_packages.sh"
+    sudo rm "${CHROOT_DIR}/tmp/install_packages.sh" /tmp/install_packages.sh
+    
     log_success "All core packages and desktop environment installed."
 }
 
@@ -363,14 +379,16 @@ step_04_install_ai_components() {
         sudo cp .env "${CHROOT_DIR}/tmp/.env"
     fi
     
-    run_in_chroot "
-        set -e
-        python3 -m pip install --break-system-packages requests python-dotenv psutil
-        
-        mkdir -p /opt/ailinux
-        
-        # Create the AI helper script
-        cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
+    # Create AI components installation script
+    cat > /tmp/install_ai.sh << 'AI_EOF'
+#!/bin/bash
+set -e
+python3 -m pip install --break-system-packages requests python-dotenv psutil
+
+mkdir -p /opt/ailinux
+
+# Create the AI helper script
+cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
 #!/usr/bin/env python3
 import os
 import sys
@@ -453,7 +471,7 @@ AILinux enthält: kde-full, firefox, chrome, thunderbird, vlc, gimp, libreoffice
                 'Load Average': os.getloadavg(),
                 'Uptime': subprocess.check_output(['uptime'], text=True).strip()
             }
-            return '\\n'.join([f'{k}: {v}' for k, v in info.items()])
+            return '\n'.join([f'{k}: {v}' for k, v in info.items()])
         except:
             return 'System info unavailable'
 
@@ -475,7 +493,7 @@ def main():
         if os.path.exists(args.log):
             with open(args.log, 'r') as f:
                 log_content = f.read()
-            user_input = f'Please analyze this log file ({args.log}):\\n\\n{log_content}'
+            user_input = f'Please analyze this log file ({args.log}):\n\n{log_content}'
         else:
             print(f'Error: Log file {args.log} not found.')
             return
@@ -487,7 +505,7 @@ def main():
             user_input = sys.stdin.read()
     
     if user_input.strip():
-        print('\\nAnalyzing...')
+        print('\nAnalyzing...')
         print(helper.analyze_problem(user_input))
     else:
         print('No input provided.')
@@ -495,17 +513,23 @@ def main():
 if __name__ == '__main__':
     main()
 AIHELPER
-        chmod +x /opt/ailinux/ailinux-helper.py
-        
-        # Create symlink for easy access
-        ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
-        
-        # Move .env file to final location
-        if [ -f '/tmp/.env' ]; then
-            mv /tmp/.env /opt/ailinux/.env
-            chmod 600 /opt/ailinux/.env
-        fi
-    "
+chmod +x /opt/ailinux/ailinux-helper.py
+
+# Create symlink for easy access
+ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
+
+# Move .env file to final location
+if [ -f '/tmp/.env' ]; then
+    mv /tmp/.env /opt/ailinux/.env
+    chmod 600 /opt/ailinux/.env
+fi
+AI_EOF
+
+    sudo cp /tmp/install_ai.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/install_ai.sh"
+    run_in_chroot "/tmp/install_ai.sh"
+    sudo rm "${CHROOT_DIR}/tmp/install_ai.sh" /tmp/install_ai.sh
+    
     log_success "AILinux AI components installed."
 }
 
@@ -518,22 +542,26 @@ step_05_configure_calamares() {
         sudo cp -r branding/* "${CHROOT_DIR}/tmp/branding/"
     fi
     
-    run_in_chroot "
-        set -e
-        # Install Calamares and dependencies
-        apt-get install -y calamares calamares-settings-ubuntu python3-pyqt5 python3-yaml python3-parted imagemagick || {
-            echo 'Warning: Some Calamares packages not available, trying minimal installation...'
-            apt-get install -y calamares || {
-                echo 'Calamares not available in repositories'
-                exit 0
-            }
-        }
-        
-        # Create Calamares configuration
-        mkdir -p /etc/calamares/modules
-        
-        # Main settings - CORRECTED VERSION
-        cat > /etc/calamares/settings.conf << 'SETTINGS'
+    # Create Calamares configuration script
+    cat > /tmp/configure_calamares.sh << 'CALAMARES_EOF'
+#!/bin/bash
+set -e
+# Install Calamares and dependencies
+apt-get install -y calamares calamares-settings-ubuntu python3-pyqt5 python3-yaml python3-parted imagemagick
+if [ $? -ne 0 ]; then
+    echo 'Warning: Some Calamares packages not available, trying minimal installation...'
+    apt-get install -y calamares
+    if [ $? -ne 0 ]; then
+        echo 'Calamares not available in repositories'
+        exit 0
+    fi
+fi
+
+# Create Calamares configuration
+mkdir -p /etc/calamares/modules
+
+# Main settings - CORRECTED VERSION
+cat > /etc/calamares/settings.conf << 'SETTINGS'
 ---
 modules-search: [ local ]
 
@@ -589,9 +617,9 @@ disable-cancel-during-exec: false
 quit-at-end: false
 SETTINGS
 
-        # CORRECTED Branding configuration
-        mkdir -p /etc/calamares/branding/ailinux
-        cat > /etc/calamares/branding/ailinux/branding.desc << 'BRANDING'
+# CORRECTED Branding configuration
+mkdir -p /etc/calamares/branding/ailinux
+cat > /etc/calamares/branding/ailinux/branding.desc << 'BRANDING'
 ---
 componentName:  ailinux
 
@@ -628,27 +656,27 @@ uploadServer:
     url:     "http://termbin.com:9999"
 BRANDING
 
-        # Copy branding images if available
-        if [ -d '/tmp/branding' ]; then
-            cp /tmp/branding/* /etc/calamares/branding/ailinux/ 2>/dev/null || true
-        fi
-        
-        # Create default images if not provided
-        if [ ! -f '/etc/calamares/branding/ailinux/logo.png' ]; then
-            convert -size 256x256 xc:'#3498db' -pointsize 24 -fill white -gravity center -annotate +0+0 'AILinux' /etc/calamares/branding/ailinux/logo.png
-        fi
-        
-        # Copy missing images from logo if they don't exist
-        if [ ! -f '/etc/calamares/branding/ailinux/icon.png' ]; then
-            cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/icon.png
-        fi
-        
-        if [ ! -f '/etc/calamares/branding/ailinux/welcome.png' ]; then
-            cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/welcome.png
-        fi
-        
-        # Create CORRECTED slideshow QML file
-        cat > /etc/calamares/branding/ailinux/show.qml << 'SLIDESHOW'
+# Copy branding images if available
+if [ -d '/tmp/branding' ]; then
+    cp /tmp/branding/* /etc/calamares/branding/ailinux/ 2>/dev/null || true
+fi
+
+# Create default images if not provided
+if [ ! -f '/etc/calamares/branding/ailinux/logo.png' ]; then
+    convert -size 256x256 xc:'#3498db' -pointsize 24 -fill white -gravity center -annotate +0+0 'AILinux' /etc/calamares/branding/ailinux/logo.png
+fi
+
+# Copy missing images from logo if they don't exist
+if [ ! -f '/etc/calamares/branding/ailinux/icon.png' ]; then
+    cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/icon.png
+fi
+
+if [ ! -f '/etc/calamares/branding/ailinux/welcome.png' ]; then
+    cp /etc/calamares/branding/ailinux/logo.png /etc/calamares/branding/ailinux/welcome.png
+fi
+
+# Create CORRECTED slideshow QML file
+cat > /etc/calamares/branding/ailinux/show.qml << 'SLIDESHOW'
 import QtQuick 2.5
 import calamares.slideshow 1.0
 
@@ -713,7 +741,7 @@ Presentation {
             
             Text {
                 width: 400
-                text: "AILinux enthält einen AI-Assistant.\\nVerwenden Sie 'aihelp' im Terminal für:\\n\\n• Systemdiagnose\\n• Fehlerbehebung\\n• Log-Analyse\\n• Technischen Support"
+                text: "AILinux enthält einen AI-Assistant.\nVerwenden Sie 'aihelp' im Terminal für:\n\n• Systemdiagnose\n• Fehlerbehebung\n• Log-Analyse\n• Technischen Support"
                 font.pixelSize: 16
                 color: "white"
                 horizontalAlignment: Text.AlignCenter
@@ -743,7 +771,7 @@ Presentation {
             
             Text {
                 width: 500
-                text: "• KDE Plasma Desktop\\n• Firefox & Chrome\\n• LibreOffice Suite\\n• GIMP & VLC\\n• Visual Studio Code\\n• Wine für Windows-Apps\\n• Entwickler-Tools"
+                text: "• KDE Plasma Desktop\n• Firefox & Chrome\n• LibreOffice Suite\n• GIMP & VLC\n• Visual Studio Code\n• Wine für Windows-Apps\n• Entwickler-Tools"
                 font.pixelSize: 16
                 color: "white"
                 horizontalAlignment: Text.AlignCenter
@@ -773,7 +801,7 @@ Presentation {
             
             Text {
                 width: 400
-                text: "AILinux wird auf Ihrem System installiert.\\nDies kann einige Minuten dauern.\\n\\nNach der Installation steht Ihnen\\nder aihelp-Befehl zur Verfügung."
+                text: "AILinux wird auf Ihrem System installiert.\nDies kann einige Minuten dauern.\n\nNach der Installation steht Ihnen\nder aihelp-Befehl zur Verfügung."
                 font.pixelSize: 16
                 color: "white"
                 horizontalAlignment: Text.AlignCenter
@@ -783,9 +811,9 @@ Presentation {
     }
 }
 SLIDESHOW
-        
-        # Welcome module (increased storage requirement)
-        cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
+
+# Welcome module (increased storage requirement)
+cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
 ---
 showSupportUrl:         true
 showKnownIssuesUrl:     false
@@ -809,8 +837,8 @@ lnf:
     showAll:        false
 WELCOME
 
-        # Users module configuration
-        cat > /etc/calamares/modules/users.conf << 'USERS'
+# Users module configuration
+cat > /etc/calamares/modules/users.conf << 'USERS'
 ---
 defaultGroups:
     - name: cdrom
@@ -854,8 +882,8 @@ hostname:
     template: "ailinux-${cpu}"
 USERS
 
-        # Unpackfs configuration
-        cat > /etc/calamares/modules/unpackfs.conf << 'UNPACKFS'
+# Unpackfs configuration
+cat > /etc/calamares/modules/unpackfs.conf << 'UNPACKFS'
 ---
 unpack:
     -   source: "/cdrom/casper/filesystem.squashfs"
@@ -867,16 +895,16 @@ exclude: [ "dev/*", "proc/*", "sys/*", "tmp/*", "run/*", "mnt/*", "media/*", "lo
 excludeFile: false
 UNPACKFS
 
-        # Finished module
-        cat > /etc/calamares/modules/finished.conf << 'FINISHED'
+# Finished module
+cat > /etc/calamares/modules/finished.conf << 'FINISHED'
 ---
 restartNowEnabled: true
 restartNowChecked: false
 notifyOnFinished: true
 FINISHED
 
-        # Display manager configuration
-        cat > /etc/calamares/modules/displaymanager.conf << 'DISPLAYMGR'
+# Display manager configuration
+cat > /etc/calamares/modules/displaymanager.conf << 'DISPLAYMGR'
 ---
 displaymanagers:
   - sddm
@@ -892,8 +920,8 @@ basicSetup: false
 sysconfigSetup: false
 DISPLAYMGR
 
-        # Post-install script configuration
-        cat > /etc/calamares/modules/postinstall.conf << 'POSTINSTALL'
+# Post-install script configuration
+cat > /etc/calamares/modules/postinstall.conf << 'POSTINSTALL'
 ---
 dontChroot: false
 timeout: 999
@@ -902,8 +930,8 @@ script:
    timeout: 999
 POSTINSTALL
 
-        # Create post-install script
-        cat > /usr/local/bin/ailinux-postinstall.sh << 'POSTSCRIPT'
+# Create post-install script
+cat > /usr/local/bin/ailinux-postinstall.sh << 'POSTSCRIPT'
 #!/bin/bash
 # AILinux Post-Installation Script
 
@@ -927,7 +955,7 @@ chroot /target systemctl enable cups || true
 chroot /target systemctl disable systemd-resolved || true
 
 # Create welcome message
-cat > /target/etc/motd << EOF
+cat > /target/etc/motd << 'MOTD_EOF'
 
 ██╗    ██╗███████╗██╗      ██████╗ ██████╗ ███╗   ███╗███████╗    ████████╗ ██████╗ 
 ██║    ██║██╔════╝██║     ██╔════╝██╔═══██╗████╗ ████║██╔════╝    ╚══██╔══╝██╔═══██╗
@@ -955,7 +983,7 @@ Willkommen bei AILinux 24.04 Premium!
 📚 Mehr Informationen: https://github.com/derleiti/ailinux-beta-iso
 🐛 Support: https://github.com/derleiti/ailinux-beta-iso/issues
 
-EOF
+MOTD_EOF
 
 # Set correct permissions
 chroot /target chown root:root /etc/motd
@@ -963,28 +991,36 @@ chroot /target chmod 644 /etc/motd
 
 echo "AILinux post-installation completed successfully."
 POSTSCRIPT
-        chmod +x /usr/local/bin/ailinux-postinstall.sh
-        
-        echo "Calamares configuration completed successfully."
-    "
+chmod +x /usr/local/bin/ailinux-postinstall.sh
+
+echo "Calamares configuration completed successfully."
+CALAMARES_EOF
+
+    sudo cp /tmp/configure_calamares.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/configure_calamares.sh"
+    run_in_chroot "/tmp/configure_calamares.sh"
+    sudo rm "${CHROOT_DIR}/tmp/configure_calamares.sh" /tmp/configure_calamares.sh
+    
     log_success "Calamares installer configured with corrected branding.desc."
 }
 
 step_06_create_live_user() {
     log_step "6/10" "Create Live User and Configure Desktop"
     
-    run_in_chroot "
-        set -e
-        # Create live user
-        useradd -s /bin/bash -d '/home/${LIVE_USER}' -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video,bluetooth,netdev '${LIVE_USER}'
-        passwd -d '${LIVE_USER}'
-        echo '${LIVE_USER} ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
-        
-        # Configure SDDM for autologin
-        mkdir -p /etc/sddm.conf.d
-        cat > /etc/sddm.conf.d/autologin.conf << EOF
+    # Create live user configuration script
+    cat > /tmp/create_user.sh << 'USER_EOF'
+#!/bin/bash
+set -e
+# Create live user
+useradd -s /bin/bash -d '/home/ailinux' -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video,bluetooth,netdev 'ailinux'
+passwd -d 'ailinux'
+echo 'ailinux ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+# Configure SDDM for autologin
+mkdir -p /etc/sddm.conf.d
+cat > /etc/sddm.conf.d/autologin.conf << 'SDDM_EOF'
 [Autologin]
-User=${LIVE_USER}
+User=ailinux
 Session=plasma
 
 [Theme]
@@ -994,11 +1030,11 @@ Current=breeze
 ServerPath=/usr/bin/X
 SessionCommand=/usr/share/sddm/scripts/Xsession
 SessionDir=/usr/share/xsessions
-EOF
-        
-        # Create desktop shortcut for installer
-        mkdir -p '/home/${LIVE_USER}/Desktop'
-        cat > '/home/${LIVE_USER}/Desktop/install-ailinux.desktop' << EOF
+SDDM_EOF
+
+# Create desktop shortcut for installer
+mkdir -p '/home/ailinux/Desktop'
+cat > '/home/ailinux/Desktop/install-ailinux.desktop' << 'INSTALL_EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -1011,11 +1047,11 @@ Exec=pkexec calamares
 Terminal=false
 StartupNotify=true
 Categories=System;
-EOF
-        chmod +x '/home/${LIVE_USER}/Desktop/install-ailinux.desktop'
-        
-        # Create AI helper shortcut
-        cat > '/home/${LIVE_USER}/Desktop/aihelp.desktop' << EOF
+INSTALL_EOF
+chmod +x '/home/ailinux/Desktop/install-ailinux.desktop'
+
+# Create AI helper shortcut
+cat > '/home/ailinux/Desktop/aihelp.desktop' << 'AIHELP_EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -1028,53 +1064,66 @@ Exec=konsole -e aihelp
 Terminal=true
 StartupNotify=true
 Categories=System;Utility;
-EOF
-        chmod +x '/home/${LIVE_USER}/Desktop/aihelp.desktop'
-        
-        # Configure .bashrc
-        cat >> '/home/${LIVE_USER}/.bashrc' << EOF
+AIHELP_EOF
+chmod +x '/home/ailinux/Desktop/aihelp.desktop'
+
+# Configure .bashrc
+cat >> '/home/ailinux/.bashrc' << 'BASHRC_EOF'
 
 # AILinux Welcome
 echo ''
 echo '🧠 Willkommen bei AILinux 24.04 Premium!'
-echo 'Verwenden Sie \"aihelp\" für KI-gestützte Systemhilfe.'
+echo 'Verwenden Sie "aihelp" für KI-gestützte Systemhilfe.'
 echo ''
-EOF
-        
-        # Set ownership
-        chown -R '${LIVE_USER}:${LIVE_USER}' '/home/${LIVE_USER}'
-    "
+BASHRC_EOF
+
+# Set ownership
+chown -R 'ailinux:ailinux' '/home/ailinux'
+USER_EOF
+
+    sudo cp /tmp/create_user.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/create_user.sh"
+    run_in_chroot "/tmp/create_user.sh"
+    sudo rm "${CHROOT_DIR}/tmp/create_user.sh" /tmp/create_user.sh
+    
     log_success "Live user and desktop configured."
 }
 
 step_07_system_cleanup() {
     log_step "7/10" "System Cleanup and Service Configuration"
     
-    run_in_chroot "
-        set -e
-        # Enable essential services
-        systemctl enable bluetooth || true
-        systemctl enable cups || true
-        systemctl enable NetworkManager || true
-        systemctl enable sddm || true
-        systemctl disable systemd-resolved || true
-        
-        # Clean package cache and temporary files
-        apt-get autoremove -y --purge
-        apt-get clean
-        rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
-        find /var/log -type f -exec truncate --size 0 {} \\;
-        
-        # Reset machine ID
-        rm -f /etc/machine-id /var/lib/dbus/machine-id
-        touch /etc/machine-id
-        
-        # Remove SSH host keys (will be regenerated on first boot)
-        rm -f /etc/ssh/ssh_host_*
-        
-        # Update initramfs
-        update-initramfs -u
-    "
+    # Create cleanup script
+    cat > /tmp/cleanup_system.sh << 'CLEANUP_EOF'
+#!/bin/bash
+set -e
+# Enable essential services
+systemctl enable bluetooth || true
+systemctl enable cups || true
+systemctl enable NetworkManager || true
+systemctl enable sddm || true
+systemctl disable systemd-resolved || true
+
+# Clean package cache and temporary files
+apt-get autoremove -y --purge
+apt-get clean
+rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+find /var/log -type f -exec truncate --size 0 {} \;
+
+# Reset machine ID
+rm -f /etc/machine-id /var/lib/dbus/machine-id
+touch /etc/machine-id
+
+# Remove SSH host keys (will be regenerated on first boot)
+rm -f /etc/ssh/ssh_host_*
+
+# Update initramfs
+update-initramfs -u
+CLEANUP_EOF
+
+    sudo cp /tmp/cleanup_system.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/cleanup_system.sh"
+    run_in_chroot "/tmp/cleanup_system.sh"
+    sudo rm "${CHROOT_DIR}/tmp/cleanup_system.sh" /tmp/cleanup_system.sh
     
     # Clean up resolv.conf before unmounting
     sudo rm -f "${CHROOT_DIR}/etc/resolv.conf"

@@ -1,2 +1,3 @@
 ./build.sh: line 379: syntax error near unexpected token `('
 ./build.sh: line 384: syntax error near unexpected token `('
+./build.sh: line 397: syntax error near unexpected token `('
