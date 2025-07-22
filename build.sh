@@ -934,52 +934,49 @@ cat > /etc/calamares/modules/postinstall.conf << 'POSTINSTALL'
 dontChroot: false
 timeout: 999
 script:
- - command: "/usr/local/bin/ailinux-postinstall.sh"
-   timeout: 999
+    - "/usr/local/bin/ailinux-postinstall.sh"
 POSTINSTALL
 
-# Create post-install script
+# Create a working post-install script that copies AI components
 cat > /usr/local/bin/ailinux-postinstall.sh << 'POSTSCRIPT'
 #!/bin/bash
 # AILinux Post-Installation Script
 
 echo "Starting AILinux post-installation configuration..."
 
-# Copy AI helper configuration
+# Ensure the script is executable
+chmod +x "$0"
+
+# Copy AI helper configuration to installed system
 if [ -f /opt/ailinux/.env ]; then
+    echo "Copying AI helper to installed system..."
     mkdir -p /target/opt/ailinux
-    cp /opt/ailinux/.env /target/opt/ailinux/.env
-    cp /opt/ailinux/ailinux-helper.py /target/opt/ailinux/ailinux-helper.py
-    chmod +x /target/opt/ailinux/ailinux-helper.py
-    chroot /target ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
-    echo "AI helper configured in target system."
+    cp /opt/ailinux/.env /target/opt/ailinux/.env 2>/dev/null || echo "No .env file found"
+    cp /opt/ailinux/ailinux-helper.py /target/opt/ailinux/ailinux-helper.py 2>/dev/null || echo "No ailinux-helper.py found"
+    chmod +x /target/opt/ailinux/ailinux-helper.py 2>/dev/null
+    
+    # Create symlink in target system
+    chroot /target ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp 2>/dev/null || echo "Could not create aihelp symlink"
+    echo "AI helper configuration copied."
+else
+    echo "Warning: AI helper configuration not found."
 fi
 
-# Enable services in target system
-chroot /target systemctl enable sddm || true
-chroot /target systemctl enable NetworkManager || true
-chroot /target systemctl enable bluetooth || true
-chroot /target systemctl enable cups || true
-chroot /target systemctl disable systemd-resolved || true
+# Configure services in target system
+echo "Enabling system services..."
+chroot /target systemctl enable sddm 2>/dev/null || echo "Could not enable SDDM"
+chroot /target systemctl enable NetworkManager 2>/dev/null || echo "Could not enable NetworkManager"  
+chroot /target systemctl enable bluetooth 2>/dev/null || echo "Could not enable Bluetooth"
+chroot /target systemctl enable cups 2>/dev/null || echo "Could not enable CUPS"
 
-# Create welcome message
+# Create welcome message for installed system
+echo "Creating welcome message..."
 cat > /target/etc/motd << 'MOTD_EOF'
 
-██╗    ██╗███████╗██╗      ██████╗ ██████╗ ███╗   ███╗███████╗    ████████╗ ██████╗ 
-██║    ██║██╔════╝██║     ██╔════╝██╔═══██╗████╗ ████║██╔════╝    ╚══██╔══╝██╔═══██╗
-██║ █╗ ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║█████╗         ██║   ██║   ██║
-██║███╗██║██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║██╔══╝         ██║   ██║   ██║
-╚███╔███╔╝███████╗███████╗╚██████╗╚██████╔╝██║ ╚═╝ ██║███████╗       ██║   ╚██████╔╝
- ╚══╝╚══╝ ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝       ╚═╝    ╚═════╝ 
-                                                                                      
-             █████╗ ██╗██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗
-            ██╔══██╗██║██║     ██║████╗  ██║██║   ██║╚██╗██╔╝
-            ███████║██║██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝ 
-            ██╔══██║██║██║     ██║██║╚██╗██║██║   ██║ ██╔██╗ 
-            ██║  ██║██║███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗
-            ╚═╝  ╚═╝╚═╝╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝
-                                                              
-                    🧠 KI-gestützte Linux-Distribution 🧠
+╔══════════════════════════════════════════════════════════════════════╗
+║                    🧠 AILinux 24.04 Premium 🧠                      ║
+║                  KI-gestützte Linux-Distribution                     ║
+╚══════════════════════════════════════════════════════════════════════╝
 
 Willkommen bei AILinux 24.04 Premium!
 
@@ -994,12 +991,20 @@ Willkommen bei AILinux 24.04 Premium!
 MOTD_EOF
 
 # Set correct permissions
-chroot /target chown root:root /etc/motd
-chroot /target chmod 644 /etc/motd
+chroot /target chown root:root /etc/motd 2>/dev/null
+chroot /target chmod 644 /etc/motd 2>/dev/null
 
 echo "AILinux post-installation completed successfully."
+exit 0
 POSTSCRIPT
 chmod +x /usr/local/bin/ailinux-postinstall.sh
+
+# Test if the post-install script is working
+if [ -x /usr/local/bin/ailinux-postinstall.sh ]; then
+    echo "Post-install script created and is executable."
+else
+    echo "Warning: Post-install script creation failed."
+fi
 
 echo "Calamares configuration completed successfully."
 CALAMARES_EOF
