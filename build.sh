@@ -260,7 +260,7 @@ BOOTSTRAP_EOF
     sudo cp /tmp/bootstrap_repos.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/bootstrap_repos.sh"
     run_in_chroot "/tmp/bootstrap_repos.sh"
-    sudo rm "${CHROOT_DIR}/tmp/bootstrap_repos.sh" /tmp/bootstrap_repos.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/bootstrap_repos.sh" /tmp/bootstrap_repos.sh || true
     
     log_success "Base system and repositories configured."
 }
@@ -366,7 +366,7 @@ PACKAGES_EOF
     sudo cp /tmp/install_packages.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/install_packages.sh"
     run_in_chroot "/tmp/install_packages.sh"
-    sudo rm "${CHROOT_DIR}/tmp/install_packages.sh" /tmp/install_packages.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/install_packages.sh" /tmp/install_packages.sh || true
     
     log_success "All core packages and desktop environment installed."
 }
@@ -528,7 +528,7 @@ AI_EOF
     sudo cp /tmp/install_ai.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/install_ai.sh"
     run_in_chroot "/tmp/install_ai.sh"
-    sudo rm "${CHROOT_DIR}/tmp/install_ai.sh" /tmp/install_ai.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/install_ai.sh" /tmp/install_ai.sh || true
     
     log_success "AILinux AI components installed."
 }
@@ -1007,7 +1007,7 @@ CALAMARES_EOF
     sudo cp /tmp/configure_calamares.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/configure_calamares.sh"
     run_in_chroot "/tmp/configure_calamares.sh"
-    sudo rm "${CHROOT_DIR}/tmp/configure_calamares.sh" /tmp/configure_calamares.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/configure_calamares.sh" /tmp/configure_calamares.sh || true
     
     log_success "Calamares installer configured with corrected branding.desc."
 }
@@ -1092,7 +1092,7 @@ USER_EOF
     sudo cp /tmp/create_user.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/create_user.sh"
     run_in_chroot "/tmp/create_user.sh"
-    sudo rm "${CHROOT_DIR}/tmp/create_user.sh" /tmp/create_user.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/create_user.sh" /tmp/create_user.sh || true
     
     log_success "Live user and desktop configured."
 }
@@ -1131,7 +1131,7 @@ CLEANUP_EOF
     sudo cp /tmp/cleanup_system.sh "${CHROOT_DIR}/tmp/"
     sudo chmod +x "${CHROOT_DIR}/tmp/cleanup_system.sh"
     run_in_chroot "/tmp/cleanup_system.sh"
-    sudo rm "${CHROOT_DIR}/tmp/cleanup_system.sh" /tmp/cleanup_system.sh
+    sudo rm -f "${CHROOT_DIR}/tmp/cleanup_system.sh" /tmp/cleanup_system.sh || true
     
     # Clean up resolv.conf before unmounting
     sudo rm -f "${CHROOT_DIR}/etc/resolv.conf"
@@ -1252,7 +1252,7 @@ EOF
     sudo cp /usr/lib/shim/shimx64.efi.signed "${efi_mount}/EFI/BOOT/BOOTX64.EFI"
     sudo umount "${efi_mount}"
     rmdir "${efi_mount}"
-    rm /tmp/bootx64.efi
+    rm -f /tmp/bootx64.efi || true
     
     log_success "Bootloaders created successfully."
 }
