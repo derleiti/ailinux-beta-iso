@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v20.1 - Complete Production Version
+# AILinux ISO Build Script v20.2 - Complete Production Version
 # Creates a bootable Live ISO of AILinux based on Ubuntu 24.04 (Noble Numbat)
 #
 # Features:
@@ -11,6 +11,7 @@
 # - Calamares installer with custom branding
 # - UEFI + BIOS boot support
 # - AI helper integration via Mixtral API
+# - AILinux mirror support for faster downloads
 #
 # License: MIT License
 # Copyright (c) 2024 derleiti
@@ -186,6 +187,12 @@ EOF
         cleanup_mounts
         sudo rm -rf "${BUILD_DIR}"
     fi
+    
+    # Remove old ISO files
+    if [ -f "${ISO_NAME}" ]; then
+        log_warn "Removing existing ISO file: ${ISO_NAME}"
+        rm -f "${ISO_NAME}" "${ISO_NAME}.sha256"
+    fi
 
     mkdir -p "${CHROOT_DIR}" "${ISO_DIR}"
     log_success "Build environment successfully set up."
@@ -231,6 +238,11 @@ EOF
         curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash || {
             echo 'Warning: AILinux repo script not available, continuing without it...'
         }
+        
+        # Switch to AILinux mirror for faster downloads
+        echo 'Switching to AILinux mirror for faster downloads...'
+        sed -i 's|http://archive.ubuntu.com/ubuntu/|https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+        sed -i 's|http://security.ubuntu.com/ubuntu/|https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
         
         # Setup locales
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
@@ -604,13 +616,13 @@ Presentation {
 }
 SLIDESHOW
         
-        # Welcome module
+        # Welcome module (increased storage requirement)
         cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
 showSupportUrl: true
 showKnownIssuesUrl: false
 showReleaseNotesUrl: false
 requirements:
-    requiredStorage: 10
+    requiredStorage: 15
     requiredRam: 2
     internetCheckUrl: http://google.com
     checkHasInternetConnection: false
@@ -797,8 +809,9 @@ step_08_create_squashfs() {
     run_in_chroot "dpkg-query -W --showformat='\\\${Package}\t\\\${Version}\n'" > "${ISO_DIR}/casper/filesystem.manifest"
     
     log_info "Creating SquashFS image with zstd compression (this may take a while)..."
+    log_info "Using higher block size for larger image..."
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" \
-        -noappend -e boot -comp zstd -b 1M -Xcompression-level 15
+        -noappend -e boot -comp zstd -b 2M -Xcompression-level 12
     
     # Create filesystem size file
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
@@ -807,6 +820,7 @@ step_08_create_squashfs() {
     echo "${DISTRO_NAME} ${DISTRO_VERSION} - Release ${ARCHITECTURE}" > "${ISO_DIR}/.disk/info"
     
     log_success "SquashFS image created successfully."
+    log_info "SquashFS size: $(du -h "${ISO_DIR}/casper/filesystem.squashfs" | cut -f1)"
 }
 
 step_09_create_bootloaders() {
@@ -918,6 +932,7 @@ Build Date: $(date)
 Distribution: ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}
 Architecture: ${ARCHITECTURE}
 ISO File: ${ISO_NAME}
+ISO Size: $(du -h "${final_iso_path}" | cut -f1)
 
 Features:
 - Ubuntu ${DISTRO_VERSION} LTS base
@@ -926,6 +941,7 @@ Features:
 - AI-powered System Helper (aihelp command)
 - Mixtral AI integration
 - Premium application suite
+- AILinux mirror for fast downloads
 
 Usage:
 - Boot from USB/DVD to try ${DISTRO_NAME}
@@ -936,6 +952,7 @@ For more information: https://github.com/derleiti/ailinux-beta-iso
 EOF
     
     log_success "ISO successfully created: ${final_iso_path}"
+    log_success "ISO Size: $(du -h "${final_iso_path}" | cut -f1)"
     log_success "Checksum: ${final_iso_path}.sha256"
     log_success "Build info: ailinux-build-info.txt"
 }
@@ -950,7 +967,7 @@ main() {
     local start_time
     start_time=$(date +%s)
     
-    log_info "==================== AILinux ISO Build v20.1 ===================="
+    log_info "==================== AILinux ISO Build v20.2 ===================="
     log_info "Starting build process for ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     
     step_01_setup
