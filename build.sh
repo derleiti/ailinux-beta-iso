@@ -229,26 +229,18 @@ EOF
         apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
 
         # Add AILinux repository (after curl/wget are installed)
-        echo 'Adding AILinux custom repository...'
-        curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash || true
-        if [ \$? -ne 0 ]; then
+        # This script also adds Wine, KDE Neon, and Google Chrome repositories
+        echo 'Adding AILinux repository and external sources...'
+        if curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash; then
+            echo 'AILinux repository and external sources added successfully.'
+        else
             echo 'Warning: AILinux repo script not available, continuing without it...'
         fi
 
-        # Add Microsoft VS Code repository
+        # Add Microsoft VS Code repository (not included in AILinux script)
         echo 'Adding Microsoft VS Code repository...'
         curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
         echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
-
-        # Add Google Chrome repository
-        echo 'Adding Google Chrome repository...'
-        curl -sSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
-        echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main' | tee /etc/apt/sources.list.d/google-chrome.list
-
-        # Add Wine repository
-        echo 'Adding Wine repository...'
-        curl -sSL https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg
-        echo 'deb [arch=amd64,i386 signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main' | tee /etc/apt/sources.list.d/winehq.list
         
         # Setup locales
         echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
@@ -256,7 +248,7 @@ EOF
         locale-gen
         update-locale LANG=en_US.UTF-8
         
-        # Enable i386 architecture for Wine
+        # Enable i386 architecture for Wine (required before final apt update)
         dpkg --add-architecture i386
         
         # Final update to fetch all package lists from all configured sources
@@ -304,40 +296,61 @@ step_03_install_packages() {
             software-properties-common apt-transport-https \
             filezilla
         
-        # Install optional packages with error handling
+        # Install optional packages with simple error handling
         echo 'Installing optional packages...'
         
         # Google Chrome
-        apt-get install -y google-chrome-stable || true
-        if ! dpkg -l google-chrome-stable &>/dev/null; then
-            echo 'Google Chrome installation failed, trying alternative method...'
-            wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb || true
-            if [ -f /tmp/chrome.deb ]; then
-                dpkg -i /tmp/chrome.deb || apt-get install -f -y
+        echo 'Trying to install Google Chrome...'
+        if apt-get install -y google-chrome-stable; then
+            echo 'Google Chrome installed successfully.'
+        else
+            echo 'Google Chrome installation from repository failed, trying direct download...'
+            if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
+                if dpkg -i /tmp/chrome.deb; then
+                    echo 'Google Chrome installed from direct download.'
+                else
+                    echo 'Fixing broken dependencies...'
+                    apt-get install -f -y
+                fi
                 rm -f /tmp/chrome.deb
+            else
+                echo 'Google Chrome download failed, skipping...'
             fi
         fi
         
         # Wine
-        apt-get install -y winehq-staging winetricks || true
-        if ! dpkg -l winehq-staging &>/dev/null; then
-            echo 'Wine installation failed, trying alternative approach...'
-            apt-get install -y wine wine32 wine64 winetricks || true
-            if ! dpkg -l wine &>/dev/null; then
+        echo 'Trying to install Wine...'
+        if apt-get install -y winehq-staging winetricks; then
+            echo 'Wine staging installed successfully.'
+        else
+            echo 'Wine staging failed, trying regular wine...'
+            if apt-get install -y wine wine32 wine64 winetricks; then
+                echo 'Regular Wine installed successfully.'
+            else
                 echo 'Wine installation completely failed, skipping...'
             fi
         fi
         
         # VS Code
-        apt-get install -y code || true
-        if ! dpkg -l code &>/dev/null; then
-            echo 'VS Code installation failed, trying direct download...'
-            wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb || true
-            if [ -f /tmp/vscode.deb ]; then
-                dpkg -i /tmp/vscode.deb || apt-get install -f -y
+        echo 'Trying to install VS Code...'
+        if apt-get install -y code; then
+            echo 'VS Code installed successfully.'
+        else
+            echo 'VS Code installation from repository failed, trying direct download...'
+            if wget -q https://packages.microsoft.com/repos/code/pool/main/c/code/code_1.96.4-1738329923_amd64.deb -O /tmp/vscode.deb; then
+                if dpkg -i /tmp/vscode.deb; then
+                    echo 'VS Code installed from direct download.'
+                else
+                    echo 'Fixing broken dependencies...'
+                    apt-get install -f -y
+                fi
                 rm -f /tmp/vscode.deb
+            else
+                echo 'VS Code download failed, skipping...'
             fi
         fi
+        
+        echo 'Package installation completed.'
     "
     log_success "All core packages and desktop environment installed."
 }
