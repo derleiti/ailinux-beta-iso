@@ -198,6 +198,59 @@ EOF
 }
 
 step_02_bootstrap_system() {
+
+# Füge diese Funktion nach step_02_bootstrap_system() ein:
+
+fix_repository_duplicates() {
+    log_info "Fixing repository duplicates..."
+    
+    # Create script to fix duplicates in chroot
+    cat > /tmp/fix_repos.sh << 'FIX_REPOS_EOF'
+#!/bin/bash
+set -e
+
+# Backup original sources.list
+cp /etc/apt/sources.list /etc/apt/sources.list.backup
+
+# Clear sources.list if ailinux.sources exists
+if [ -f /etc/apt/sources.list.d/ailinux.sources ]; then
+    echo "# Moved to /etc/apt/sources.list.d/ailinux.sources" > /etc/apt/sources.list
+fi
+
+# Remove duplicate Google Chrome entries
+if [ -f /etc/apt/sources.list.d/google-chrome.sources ]; then
+    rm -f /etc/apt/sources.list.d/google-chrome.list
+fi
+
+# Remove noble-backports from AILinux mirror (it doesn't exist there)
+if [ -f /etc/apt/sources.list.d/ailinux.sources ]; then
+    sed -i '/noble-backports/d' /etc/apt/sources.list.d/ailinux.sources
+fi
+
+# Add standard noble-backports if needed
+if ! grep -q "noble-backports" /etc/apt/sources.list*; then
+    echo "deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse" >> /etc/apt/sources.list
+fi
+
+# Clean apt cache
+apt-get clean
+apt-get update || echo "Some repositories may have issues, continuing..."
+FIX_REPOS_EOF
+
+    sudo cp /tmp/fix_repos.sh "${CHROOT_DIR}/tmp/"
+    sudo chmod +x "${CHROOT_DIR}/tmp/fix_repos.sh"
+    run_in_chroot "/tmp/fix_repos.sh"
+    sudo rm -f "${CHROOT_DIR}/tmp/fix_repos.sh" /tmp/fix_repos.sh || true
+    
+    log_success "Repository duplicates fixed."
+}
+
+# Rufe diese Funktion nach step_02 auf:
+# In der main() Funktion nach step_02_bootstrap_system hinzufügen:
+#    step_02_bootstrap_system
+#    fix_repository_duplicates  # <-- Neue Zeile
+#    step_03_install_packages
+
     log_step "2/10" "Bootstrap Base System and Configure Repositories"
     
     log_info "Running debootstrap to create base system..."
@@ -1468,4 +1521,3 @@ main() {
 }
 
 # Start the script
-main "$@"
