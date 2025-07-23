@@ -1,9 +1,10 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v25.07 - Refined Edition
+# AILinux ISO Build Script v25.08 - Refined & Corrected Edition
 # Erstellt ein bootfähiges Live-ISO von AILinux, basierend auf Ubuntu 24.04 (Noble Numbat).
 #
 # Verbesserungen in dieser Version:
+# - KORREKTUR: Das nicht verfügbare Paket 'calamares-settings-ubuntu' wurde entfernt.
 # - Beibehaltung der kritischen Calamares Bootloader-Korrektur.
 # - Neuorganisation der Paketlisten in Arrays für bessere Lesbarkeit und Wartbarkeit.
 # - Verbesserte Kommentare zur Erklärung komplexer Schritte.
@@ -511,7 +512,8 @@ apt-get install -y \
 apt-get install -y python3-yaml python3-parted python3-setuptools python3-pyqt5
 
 # Calamares Hauptpaket und zusätzliche Abhängigkeiten
-apt-get install -y calamares calamares-settings-ubuntu imagemagick squashfs-tools dosfstools ntfs-3g btrfs-progs xfsprogs e2fsprogs
+# KORREKTUR: 'calamares-settings-ubuntu' wurde entfernt, da es nicht benötigt wird und nicht verfügbar ist.
+apt-get install -y calamares imagemagick squashfs-tools dosfstools ntfs-3g btrfs-progs xfsprogs e2fsprogs
 
 # Erstelle Calamares Konfigurationsverzeichnisse
 mkdir -p /etc/calamares/modules
@@ -881,7 +883,7 @@ main() {
     local start_time
     start_time=$(date +%s)
     
-    log_info "==================== AILinux ISO Build v25.07 - Refined Edition ===================="
+    log_info "==================== AILinux ISO Build v25.08 - Refined & Corrected ===================="
     log_info "Starte Build-Prozess für ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     
     step_01_setup
