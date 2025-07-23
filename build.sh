@@ -234,8 +234,18 @@ echo 'Adding AILinux repository and external sources...'
 curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
 if [ $? -eq 0 ]; then
     echo 'AILinux repository and external sources added successfully.'
+    
+    # Switch to faster AILinux Ubuntu mirror
+    echo 'Switching to faster AILinux Ubuntu mirror...'
+    cat > /etc/apt/sources.list << 'SOURCES_EOF'
+deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+SOURCES_EOF
+    echo 'Ubuntu mirror switched to AILinux fast mirror.'
 else
-    echo 'Warning: AILinux repo script not available, continuing without it...'
+    echo 'Warning: AILinux repo script not available, continuing with standard Ubuntu mirrors...'
 fi
 
 # Add Microsoft VS Code repository
@@ -305,6 +315,38 @@ apt-get install -y \
     software-properties-common apt-transport-https \
     filezilla
 
+# Install explicitly requested packages via apt
+echo 'Installing explicitly requested packages...'
+
+# Try to install AILinux App from repository first
+if apt-get install -y ailinux-app; then
+    echo 'AILinux App installed successfully from repository.'
+else
+    echo 'AILinux App not available in repository - will install manually later.'
+fi
+
+# Install Wine packages
+if apt-get install -y winehq-staging winetricks; then
+    echo 'Wine staging and winetricks installed successfully.'
+else
+    echo 'Wine staging failed, trying regular wine...'
+    apt-get install -y wine wine32 wine64 winetricks || echo 'Wine installation failed'
+fi
+
+# Install Google Chrome
+if apt-get install -y google-chrome-stable; then
+    echo 'Google Chrome installed successfully from repository.'
+else
+    echo 'Google Chrome not available in repository - will install manually.'
+fi
+
+# Install VS Code
+if apt-get install -y code; then
+    echo 'VS Code installed successfully from repository.'
+else
+    echo 'VS Code not available in repository - will install manually.'
+fi
+
 # Install PyQt5 packages correctly for Ubuntu 24.04
 echo 'Installing PyQt5 packages for AILinux App...'
 if apt-get install -y python3-pyqt5; then
@@ -321,47 +363,48 @@ else
     }
 fi
 
-# Install optional packages with simple error handling
-echo 'Installing optional packages...'
+# Install optional packages with fallback downloads if repository packages failed
+echo 'Checking for any missing packages and installing via direct download if needed...'
 
-# Google Chrome
-echo 'Trying to install Google Chrome...'
-if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
-    if dpkg -i /tmp/chrome.deb; then
-        echo 'Google Chrome installed from direct download.'
+# Google Chrome fallback (only if repository installation failed)
+if ! dpkg -l google-chrome-stable &>/dev/null; then
+    echo 'Google Chrome not installed via repository, trying direct download...'
+    if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
+        if dpkg -i /tmp/chrome.deb; then
+            echo 'Google Chrome installed from direct download.'
+        else
+            echo 'Fixing broken dependencies...'
+            apt-get install -f -y
+        fi
+        rm -f /tmp/chrome.deb
     else
-        echo 'Fixing broken dependencies...'
-        apt-get install -f -y
-    fi
-    rm -f /tmp/chrome.deb
-else
-    echo 'Google Chrome download failed, skipping...'
-fi
-
-# Wine
-echo 'Trying to install Wine...'
-# Add Wine repository for better compatibility with modern GPG handling
-wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg 2>/dev/null || echo 'Wine key add failed'
-echo "deb [signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main" | tee /etc/apt/sources.list.d/winehq.list > /dev/null 2>&1 || echo 'Wine repo add failed'
-apt-get update || true
-
-if apt-get install -y winehq-staging winetricks; then
-    echo 'Wine staging installed successfully.'
-else
-    echo 'Wine staging failed, trying regular wine...'
-    if apt-get install -y wine wine32 wine64 winetricks; then
-        echo 'Regular Wine installed successfully.'
-    else
-        echo 'Wine installation completely failed, skipping...'
+        echo 'Google Chrome download failed, skipping...'
     fi
 fi
 
-# VS Code
-echo 'Trying to install VS Code...'
-if apt-get install -y code; then
-    echo 'VS Code installed successfully.'
-else
-    echo 'VS Code installation from repository failed, trying direct download...'
+# Wine fallback (only if repository installation failed)  
+if ! dpkg -l winehq-staging &>/dev/null && ! dpkg -l wine &>/dev/null; then
+    echo 'Wine not installed via repository, trying alternative installation...'
+    # Add Wine repository for better compatibility with modern GPG handling
+    wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg 2>/dev/null || echo 'Wine key add failed'
+    echo "deb [signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main" | tee /etc/apt/sources.list.d/winehq.list > /dev/null 2>&1 || echo 'Wine repo add failed'
+    apt-get update || true
+    
+    if apt-get install -y winehq-staging winetricks; then
+        echo 'Wine staging installed from Wine repository.'
+    else
+        echo 'Wine staging failed, trying regular wine...'
+        if apt-get install -y wine wine32 wine64 winetricks; then
+            echo 'Regular Wine installed successfully.'
+        else
+            echo 'Wine installation completely failed, skipping...'
+        fi
+    fi
+fi
+
+# VS Code fallback (only if repository installation failed)
+if ! dpkg -l code &>/dev/null; then
+    echo 'VS Code not installed via repository, trying direct download...'
     if wget -q https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64 -O /tmp/vscode.deb; then
         if dpkg -i /tmp/vscode.deb; then
             echo 'VS Code installed from direct download.'
