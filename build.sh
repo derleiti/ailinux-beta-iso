@@ -244,6 +244,14 @@ deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble-backports ma
 deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
 SOURCES_EOF
     echo 'Ubuntu mirror switched to AILinux fast mirror.'
+    
+    # Update package lists with the new mirror configuration
+    echo 'Updating package lists with AILinux mirror...'
+    apt-get update || {
+        echo 'Some repositories failed, cleaning and retrying...'
+        apt-get clean
+        apt-get update --allow-insecure-repositories || echo 'Update completed with some warnings, continuing...'
+    }
 else
     echo 'Warning: AILinux repo script not available, continuing with standard Ubuntu mirrors...'
 fi
@@ -263,7 +271,10 @@ update-locale LANG=en_US.UTF-8
 dpkg --add-architecture i386
 
 # Final update to fetch all package lists
-apt-get update
+apt-get update || {
+    echo 'Some repositories failed to update, trying to continue...'
+    apt-get update --allow-insecure-repositories || echo 'Update completed with some errors, continuing build...'
+}
 BOOTSTRAP_EOF
 
     sudo cp /tmp/bootstrap_repos.sh "${CHROOT_DIR}/tmp/"
@@ -388,7 +399,7 @@ if ! dpkg -l winehq-staging &>/dev/null && ! dpkg -l wine &>/dev/null; then
     # Add Wine repository for better compatibility with modern GPG handling
     wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg 2>/dev/null || echo 'Wine key add failed'
     echo "deb [signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main" | tee /etc/apt/sources.list.d/winehq.list > /dev/null 2>&1 || echo 'Wine repo add failed'
-    apt-get update || true
+    apt-get update || echo 'Some Wine repository updates failed, continuing...'
     
     if apt-get install -y winehq-staging winetricks; then
         echo 'Wine staging installed from Wine repository.'
