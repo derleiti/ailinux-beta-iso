@@ -331,9 +331,9 @@ fi
 
 # Wine
 echo 'Trying to install Wine...'
-# Add Wine repository for better compatibility
-wget -qO- https://dl.winehq.org/wine-builds/winehq.key | apt-key add - 2>/dev/null || echo 'Wine key add failed'
-add-apt-repository -y "deb https://dl.winehq.org/wine-builds/ubuntu/ noble main" 2>/dev/null || echo 'Wine repo add failed'
+# Add Wine repository for better compatibility with modern GPG handling
+wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg 2>/dev/null || echo 'Wine key add failed'
+echo "deb [signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main" | tee /etc/apt/sources.list.d/winehq.list > /dev/null 2>&1 || echo 'Wine repo add failed'
 apt-get update || true
 
 if apt-get install -y winehq-staging winetricks; then
@@ -589,21 +589,23 @@ apt-get install -y \
     os-prober \
     shim-signed
 
-# Install Python dependencies for Calamares modules
-apt-get install -y \
-    python3-yaml \
-    python3-parted \
-    python3-libparted \
-    python3-distutils \
-    python3-psutil \
-    python3-subprocess-tee
+# Install Python dependencies for Calamares modules (with fallbacks)
+echo 'Installing Python dependencies for Calamares...'
+apt-get install -y python3-yaml python3-parted || echo 'Core Python packages failed'
+apt-get install -y python3-setuptools || apt-get install -y python3-distutils-extra || echo 'Setuptools/distutils not available'
+apt-get install -y python3-psutil || echo 'psutil not available'
+apt-get install -y python3-subprocess-tee || echo 'subprocess-tee not available (optional)'
 
 # Install Calamares main package
 if apt-get install -y calamares; then
     echo 'Calamares installed successfully.'
 else
-    echo 'Calamares installation failed. Continuing without installer...'
-    exit 0
+    echo 'Standard Calamares installation failed, trying alternative method...'
+    # Try installing from universe repository if not available in main
+    apt-get install -y calamares calamares-settings-ubuntu || {
+        echo 'Calamares installation failed completely. Continuing without installer...'
+        exit 0
+    }
 fi
 
 # Install additional dependencies that might be missing
