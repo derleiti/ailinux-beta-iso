@@ -562,17 +562,89 @@ strings:
     productName: AILinux
     version: 24.04 Premium
     shortVersionedName: AILinux 24.04
+    versionedName: AILinux 24.04 Premium
+    shortProductName: AILinux
     bootloaderEntryName: AILinux
     productUrl: https://github.com/derleiti/ailinux-beta-iso
+    supportUrl: https://github.com/derleiti/ailinux-beta-iso/issues
+    knownIssuesUrl: https://github.com/derleiti/ailinux-beta-iso/issues
+    releaseNotesUrl: https://github.com/derleiti/ailinux-beta-iso/releases
+
 style:
     sidebarBackground: "#2c3e50"
     sidebarText: "#ffffff"
+    sidebarTextSelect: "#4e73c7"
+    sidebarTextCurrent: "#ffffff"
+
 images:
     productLogo: "logo.png"
     productIcon: "icon.png"
     productWelcome: "welcome.png"
+
+slideshow: "show.qml"
 slideshowAPI: 2
 BRANDING
+
+# Erstelle einfache QML-Slideshow
+cat > /etc/calamares/branding/ailinux/show.qml << '"'QML'"'
+import QtQuick 2.0
+import QtQuick.Controls 2.5
+import QtQuick.Layouts 1.3
+
+Rectangle {
+    id: slideshow
+    color: "#2c3e50"
+    
+    property int currentSlide: 0
+    property var slides: [
+        "Willkommen bei AILinux 24.04 Premium",
+        "KI-gestützte Systemunterstützung mit aihelp",
+        "Vollständige KDE Plasma Desktop-Umgebung",
+        "Sichere Installation mit UEFI/BIOS-Support",
+        "Installation wird abgeschlossen..."
+    ]
+    
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        onTriggered: {
+            currentSlide = (currentSlide + 1) % slides.length
+        }
+    }
+    
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 20
+        
+        Image {
+            source: "logo.png"
+            Layout.preferredWidth: 128
+            Layout.preferredHeight: 128
+            Layout.alignment: Qt.AlignHCenter
+            fillMode: Image.PreserveAspectFit
+        }
+        
+        Text {
+            text: slides[currentSlide]
+            color: "white"
+            font.pixelSize: 24
+            font.weight: Font.Bold
+            Layout.alignment: Qt.AlignHCenter
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            Layout.maximumWidth: slideshow.width * 0.8
+        }
+        
+        Text {
+            text: "AILinux wird installiert - Bitte warten..."
+            color: "#bdc3c7"
+            font.pixelSize: 16
+            Layout.alignment: Qt.AlignHCenter
+        }
+    }
+}
+QML
 
 # Kopiere Branding-Bilder falls vorhanden, sonst erstelle Fallbacks
 if [ -d "/tmp/branding" ]; then

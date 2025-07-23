@@ -573,7 +573,7 @@ prompt-install: false
 quit-at-end: false
 SETTINGS
 
-# FIX: Erweiterte Branding-Konfiguration mit korrigierter YAML-Syntax
+# FIX: Korrekte Branding-Konfiguration mit korrekter slideshow-Hierarchie
 cat > /etc/calamares/branding/ailinux/branding.desc << '"'BRANDING'"'
 ---
 componentName: ailinux
@@ -599,21 +599,19 @@ images:
     productLogo: "logo.png"
     productIcon: "icon.png"
     productWelcome: "welcome.png"
-    productBanner: "banner.png"
 
 slideshow:
     api: 2
+    show:
+        - welcome
+        - locale
+        - keyboard
+        - partition
+        - users
+        - summary
+        - finished
 
 slideshowAPI: 2
-
-show:
-    - welcome
-    - locale
-    - keyboard
-    - partition
-    - users
-    - summary
-    - finished
 BRANDING
 
 # Kopiere Branding-Bilder falls vorhanden, sonst erstelle Fallbacks
