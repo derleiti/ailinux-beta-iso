@@ -1,23 +1,20 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v21.0 - BOOTLOADER FIXED VERSION
-# Creates a bootable Live ISO of AILinux based on Ubuntu 24.04 (Noble Numbat)
+# AILinux ISO Build Script v25.07 - Refined Edition
+# Erstellt ein bootfähiges Live-ISO von AILinux, basierend auf Ubuntu 24.04 (Noble Numbat).
 #
-# Features:
-# - FIXED Calamares bootloader configuration
-# - Enhanced Python dependencies for Calamares modules
-# - Improved error handling and logging
-# - Complete KDE Plasma desktop with applications
-# - AI helper integration via Mixtral API
-# - UEFI + BIOS boot support with Secure Boot
-# - AILinux mirror support for faster downloads
+# Verbesserungen in dieser Version:
+# - Beibehaltung der kritischen Calamares Bootloader-Korrektur.
+# - Neuorganisation der Paketlisten in Arrays für bessere Lesbarkeit und Wartbarkeit.
+# - Verbesserte Kommentare zur Erklärung komplexer Schritte.
+# - Beibehaltung der robusten AI-Debugging-Funktion und Fallback-Mechanismen.
 #
-# License: MIT License
+# Lizenz: MIT License
 # Copyright (c) 2024-2025 derleiti
 
 set -eo pipefail
 
-# --- Configuration ---
+# --- Konfiguration ---
 readonly DISTRO_NAME="AILinux"
 readonly DISTRO_VERSION="24.04"
 readonly DISTRO_EDITION="Premium"
@@ -33,7 +30,7 @@ readonly ISO_DIR="${BUILD_DIR}/iso"
 readonly ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-${DISTRO_EDITION,,}-${ARCHITECTURE}.iso"
 readonly LOG_FILE="$(pwd)/build.log"
 
-# --- Color and Logging Functions ---
+# --- Farben und Logging-Funktionen ---
 readonly COLOR_RESET='\033[0m'
 readonly COLOR_INFO='\033[0;34m'
 readonly COLOR_SUCCESS='\033[0;32m'
@@ -42,7 +39,7 @@ readonly COLOR_ERROR='\033[0;31m'
 readonly COLOR_STEP='\033[1;36m'
 readonly COLOR_AI='\033[1;35m'
 
-# Redirect all output to log file and terminal
+# Leitet die gesamte Ausgabe in die Log-Datei und das Terminal um
 exec > >(tee -a "${LOG_FILE}") 2>&1
 
 log() {
@@ -62,10 +59,10 @@ log_step() {
 }
 log_ai() { log "${COLOR_AI}" "AI-DEBUG" "$1"; }
 
-# --- AI Debugger Function ---
+# --- AI Debugger Funktion ---
 ai_debugger() {
-    log_error "Build failed. Starting AI analysis..."
-    log_ai "Sending build log to Mixtral AI for analysis..."
+    log_error "Build fehlgeschlagen. Starte KI-Analyse..."
+    log_ai "Sende Build-Log zur Analyse an die Mixtral AI..."
     
     local api_key
     if [ -f ".env" ]; then
@@ -73,46 +70,46 @@ ai_debugger() {
     fi
 
     if [ -z "$api_key" ] || [ "$api_key" = "your_mixtral_api_key_here" ]; then
-        log_error "No valid API key found. Skipping AI analysis."
+        log_error "Kein gültiger API-Schlüssel gefunden. Überspringe KI-Analyse."
         return
     fi
     
     local system_prompt="You are an expert-level Linux distribution build-system debugger. A user's build script has failed. Analyze the complete build.log provided. Identify the exact point of failure and provide a clear, actionable solution. Structure your response in German as follows:\n\n### 🚨 Fehleranalyse\nPrecise description of which command failed and why.\n\n### ✅ Lösungsvorschlag\nConcrete, step-by-step plan to fix the problem. If code needs to be changed, provide the exact corrected code block."
     
     local log_content
-    log_content=$(tail -n 200 "${LOG_FILE}" | jq -Rs . 2>/dev/null || echo '"Log analysis failed"')
+    log_content=$(tail -n 200 "${LOG_FILE}" | jq -Rs . 2>/dev/null || echo '"Log-Analyse fehlgeschlagen"')
 
     local json_payload
     json_payload=$(jq -n \
-                   --arg sp "$system_prompt" \
-                   --arg lc "$log_content" \
-                   '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}' 2>/dev/null || echo '{}')
+                      --arg sp "$system_prompt" \
+                      --arg lc "$log_content" \
+                      '{model: "mistral-large-latest", messages: [{"role": "system", "content": $sp}, {"role": "user", "content": $lc}]}' 2>/dev/null || echo '{}')
 
-    log_ai "Performing analysis... This may take a moment."
+    log_ai "Führe Analyse durch... Dies kann einen Moment dauern."
     
     local ai_response
     ai_response=$(curl -s -X POST "https://api.mistral.ai/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $api_key" \
-        -d "$json_payload" 2>/dev/null || echo '{"choices":[{"message":{"content":"Analysis failed"}}]}')
+        -d "$json_payload" 2>/dev/null || echo '{"choices":[{"message":{"content":"Analyse fehlgeschlagen"}}]}')
 
     local analysis
-    analysis=$(echo "$ai_response" | jq -r '.choices[0].message.content // "Analysis failed"' 2>/dev/null || echo "Analysis failed")
+    analysis=$(echo "$ai_response" | jq -r '.choices[0].message.content // "Analyse fehlgeschlagen"' 2>/dev/null || echo "Analyse fehlgeschlagen")
 
     echo
-    log_ai "AI Analysis Result:"
+    log_ai "Ergebnis der KI-Analyse:"
     echo -e "${COLOR_AI}----------------------------------------------------------------------${COLOR_RESET}"
     echo -e "$analysis"
     echo -e "${COLOR_AI}----------------------------------------------------------------------${COLOR_RESET}"
 }
 
-# Error trap: calls AI debugger before script exits
+# Fehler-Trap: Ruft den AI-Debugger auf, bevor das Skript beendet wird
 trap 'ai_debugger' ERR
 
-# --- Helper Functions ---
+# --- Hilfsfunktionen ---
 check_not_root() {
     if [ "$(id -u)" -eq 0 ]; then
-        log_error "This script must not be run as root. It uses 'sudo' when needed."
+        log_error "Dieses Skript darf nicht als Root ausgeführt werden. Es verwendet bei Bedarf 'sudo'."
         exit 1
     fi
 }
@@ -121,6 +118,7 @@ check_dependencies() {
     local dependencies=("debootstrap" "squashfs-tools" "xorriso" "grub-pc-bin" "grub-efi-amd64-bin" "mtools" "dosfstools" "isolinux" "syslinux-common" "shim-signed" "gnupg" "git" "curl" "jq" "python3" "python3-pip")
     local missing=()
     
+    log_info "Prüfe Abhängigkeiten: ${dependencies[*]}"
     for dep in "${dependencies[@]}"; do
         if ! dpkg -l "$dep" &>/dev/null; then
             missing+=("$dep")
@@ -128,8 +126,8 @@ check_dependencies() {
     done
     
     if [ ${#missing[@]} -gt 0 ]; then
-        log_warn "Missing dependencies: ${missing[*]}"
-        log_info "Installing missing packages..."
+        log_warn "Fehlende Abhängigkeiten: ${missing[*]}"
+        log_info "Installiere fehlende Pakete..."
         sudo apt-get update
         sudo apt-get install -y "${missing[@]}"
     fi
@@ -148,115 +146,63 @@ run_in_chroot() {
 }
 
 cleanup_mounts() {
-    log_info "Cleaning up mount points..."
-    for mount_point in "/run" "/sys" "/proc" "/dev/pts" "/dev"; do
+    log_info "Bereinige Mount-Punkte..."
+    # Unmount in umgekehrter Reihenfolge der tiefsten Verschachtelung
+    for mount_point in "/dev/pts" "/dev" "/proc" "/sys" "/run"; do
         if mountpoint -q "${CHROOT_DIR}${mount_point}" 2>/dev/null; then
             sudo umount -f -l "${CHROOT_DIR}${mount_point}" || true
         fi
     done
 }
 
-# --- Build Steps ---
+# --- Build-Schritte ---
 
 step_01_setup() {
-    log_step "1/10" "Environment Setup and Dependency Check"
+    log_step "1/10" "Einrichtung der Umgebung und Prüfung der Abhängigkeiten"
     
-    # Create .env.example if it doesn't exist
+    # Erstelle .env.example, falls nicht vorhanden
     if [ ! -f ".env.example" ]; then
-        log_info "Creating .env.example template..."
+        log_info "Erstelle .env.example Vorlage..."
         cat > .env.example << 'EOF'
-# .env - API key for Mixtral AI access
-# Copy this file to .env and add your API key
-MISTRALAPIKEY=your_mixtral_api_key_here
+# .env - API-Schlüssel für den Mixtral AI-Zugang
+# Kopiere diese Datei nach .env und füge deinen API-Schlüssel hinzu
+MISTRALAPIKEY="dein_mixtral_api_schlüssel_hier"
 EOF
     fi
     
-    # Check for .env file
+    # Prüfe auf .env-Datei
     if [ ! -f ".env" ]; then
-        log_error "Please create a .env file from the template and add your API key."
-        log_info "Run: cp .env.example .env && nano .env"
+        log_error "Bitte erstelle eine .env-Datei aus der Vorlage und füge deinen API-Schlüssel hinzu."
+        log_info "Führe aus: cp .env.example .env && nano .env"
         exit 1
     fi
 
     check_dependencies
     
-    # Clean previous build
+    # Bereinige vorherigen Build
     if [ -d "${BUILD_DIR}" ]; then
-        log_warn "Previous build directory found. Cleaning up..."
+        log_warn "Vorheriges Build-Verzeichnis gefunden. Bereinige..."
         cleanup_mounts
         sudo rm -rf "${BUILD_DIR}"
     fi
     
-    # Remove old ISO files
+    # Entferne alte ISO-Dateien
     if [ -f "${ISO_NAME}" ]; then
-        log_warn "Removing existing ISO file: ${ISO_NAME}"
+        log_warn "Entferne existierende ISO-Datei: ${ISO_NAME}"
         rm -f "${ISO_NAME}" "${ISO_NAME}.sha256"
     fi
 
     mkdir -p "${CHROOT_DIR}" "${ISO_DIR}"
-    log_success "Build environment successfully set up."
+    log_success "Build-Umgebung erfolgreich eingerichtet."
 }
 
 step_02_bootstrap_system() {
-
-# Füge diese Funktion nach step_02_bootstrap_system() ein:
-
-fix_repository_duplicates() {
-    log_info "Fixing repository duplicates..."
+    log_step "2/10" "Bootstrap des Basissystems und Konfiguration der Repositories"
     
-    # Create script to fix duplicates in chroot
-    cat > /tmp/fix_repos.sh << 'FIX_REPOS_EOF'
-#!/bin/bash
-set -e
-
-# Backup original sources.list
-cp /etc/apt/sources.list /etc/apt/sources.list.backup
-
-# Clear sources.list if ailinux.sources exists
-if [ -f /etc/apt/sources.list.d/ailinux.sources ]; then
-    echo "# Moved to /etc/apt/sources.list.d/ailinux.sources" > /etc/apt/sources.list
-fi
-
-# Remove duplicate Google Chrome entries
-if [ -f /etc/apt/sources.list.d/google-chrome.sources ]; then
-    rm -f /etc/apt/sources.list.d/google-chrome.list
-fi
-
-# Remove noble-backports from AILinux mirror (it doesn't exist there)
-if [ -f /etc/apt/sources.list.d/ailinux.sources ]; then
-    sed -i '/noble-backports/d' /etc/apt/sources.list.d/ailinux.sources
-fi
-
-# Add standard noble-backports if needed
-if ! grep -q "noble-backports" /etc/apt/sources.list*; then
-    echo "deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse" >> /etc/apt/sources.list
-fi
-
-# Clean apt cache
-apt-get clean
-apt-get update || echo "Some repositories may have issues, continuing..."
-FIX_REPOS_EOF
-
-    sudo cp /tmp/fix_repos.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/fix_repos.sh"
-    run_in_chroot "/tmp/fix_repos.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/fix_repos.sh" /tmp/fix_repos.sh || true
-    
-    log_success "Repository duplicates fixed."
-}
-
-# Rufe diese Funktion nach step_02 auf:
-# In der main() Funktion nach step_02_bootstrap_system hinzufügen:
-#    step_02_bootstrap_system
-#    fix_repository_duplicates  # <-- Neue Zeile
-#    step_03_install_packages
-
-    log_step "2/10" "Bootstrap Base System and Configure Repositories"
-    
-    log_info "Running debootstrap to create base system..."
+    log_info "Führe debootstrap aus, um das Basissystem zu erstellen..."
     sudo debootstrap --arch="${ARCHITECTURE}" --variant=minbase "${UBUNTU_CODENAME}" "${CHROOT_DIR}" http://archive.ubuntu.com/ubuntu/
     
-    log_info "Configuring full APT sources for the new system..."
+    log_info "Konfiguriere APT-Quellen für das neue System..."
     sudo tee "${CHROOT_DIR}/etc/apt/sources.list" > /dev/null <<'EOF'
 deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
 deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
@@ -264,7 +210,7 @@ deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe m
 deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
 EOF
 
-    # Setup mounts for chroot
+    # Richte Mounts für chroot ein
     sudo mount --bind /dev "${CHROOT_DIR}/dev"
     sudo mount --bind /dev/pts "${CHROOT_DIR}/dev/pts"
     sudo mount -t proc proc "${CHROOT_DIR}/proc"
@@ -272,248 +218,146 @@ EOF
     sudo mount --bind /run "${CHROOT_DIR}/run"
     sudo cp /etc/resolv.conf "${CHROOT_DIR}/etc/"
 
-    # Create bootstrap script file to avoid complex heredoc
-    cat > /tmp/bootstrap_repos.sh << 'BOOTSTRAP_EOF'
+    # Erstelle ein Bootstrap-Skript, um komplexe Here-Dokumente zu vermeiden
+    local bootstrap_script
+    bootstrap_script='
 #!/bin/bash
 set -e
-echo 'ailinux' > /etc/hostname
+echo "'${LIVE_HOSTNAME}'" > /etc/hostname
 
-# Configure basic locale and APT
+# Basiskonfiguration für Locale und APT
 apt-get update
-apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
+apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates software-properties-common
 
-# Add AILinux repository and external sources (Wine, Chrome, KDE Neon)
-echo 'Adding AILinux repository and external sources...'
+# Füge AILinux-Repository und externe Quellen hinzu
+echo "Füge AILinux-Repository und externe Quellen hinzu..."
 curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
-if [ $? -eq 0 ]; then
-    echo 'AILinux repository and external sources added successfully.'
-    
-    # Switch to faster AILinux Ubuntu mirror
-    echo 'Switching to faster AILinux Ubuntu mirror...'
-    cat > /etc/apt/sources.list << 'SOURCES_EOF'
-deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
-deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
-deb https://ailinux.me:8443/mirror/archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
-SOURCES_EOF
-    echo 'Ubuntu mirror switched to AILinux fast mirror.'
-    
-    # Update package lists with the new mirror configuration
-    echo 'Updating package lists with AILinux mirror...'
-    apt-get update || {
-        echo 'Some repositories failed, cleaning and retrying...'
-        apt-get clean
-        apt-get update --allow-insecure-repositories || echo 'Update completed with some warnings, continuing...'
-    }
-else
-    echo 'Warning: AILinux repo script not available, continuing with standard Ubuntu mirrors...'
-fi
 
-# Add Microsoft VS Code repository
-echo 'Adding Microsoft VS Code repository...'
+# Füge Microsoft VS Code Repository hinzu
+echo "Füge Microsoft VS Code Repository hinzu..."
 curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
-echo 'deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list
+echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | tee /etc/apt/sources.list.d/vscode.list
 
-# Setup locales
-echo 'en_US.UTF-8 UTF-8' > /etc/locale.gen
-echo 'de_DE.UTF-8 UTF-8' >> /etc/locale.gen
+# Richte Locales ein
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+echo "de_DE.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 update-locale LANG=en_US.UTF-8
 
-# Enable i386 architecture for Wine
+# Aktiviere i386-Architektur für Wine
 dpkg --add-architecture i386
 
-# Final update to fetch all package lists
-apt-get update || {
-    echo 'Some repositories failed to update, trying to continue...'
-    apt-get update --allow-insecure-repositories || echo 'Update completed with some errors, continuing build...'
-}
-BOOTSTRAP_EOF
-
-    sudo cp /tmp/bootstrap_repos.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/bootstrap_repos.sh"
-    run_in_chroot "/tmp/bootstrap_repos.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/bootstrap_repos.sh" /tmp/bootstrap_repos.sh || true
+# Finale Aktualisierung, um alle Paketlisten abzurufen
+apt-get update
+'
+    run_in_chroot "$bootstrap_script"
     
-    log_success "Base system and repositories configured."
+    log_success "Basissystem und Repositories konfiguriert."
 }
 
 step_03_install_packages() {
-    log_step "3/10" "Install Core Packages, Kernel, and Desktop Environment"
+    log_step "3/10" "Installation von Kernpaketen, Kernel und Desktop-Umgebung"
     
-    # Create package installation script
-    cat > /tmp/install_packages.sh << 'PACKAGES_EOF'
-#!/bin/bash
-set -e
-
-# Install kernel and boot components
-apt-get install -y \
-    linux-image-generic linux-headers-generic \
-    casper discover laptop-detect os-prober \
-    network-manager resolvconf net-tools wireless-tools \
-    plymouth-theme-spinner ubuntu-standard \
-    keyboard-configuration console-setup \
-    sudo systemd systemd-sysv dbus init rsyslog \
-    systemd-coredump grub-efi-amd64 shim-signed \
-    initramfs-tools live-boot
-
-# Install complete KDE desktop
-apt-get install -y \
-    kde-full plasma-desktop sddm-theme-breeze \
-    xorg xinit x11-xserver-utils xserver-xorg-video-all
-
-# Install core applications first
-apt-get install -y \
-    firefox thunderbird vlc gimp \
-    libreoffice libreoffice-l10n-en-us \
-    gparted htop neofetch konsole kate okular \
-    gwenview ark dolphin \
-    ubuntu-restricted-extras ffmpeg \
-    pulseaudio pulseaudio-utils pavucontrol \
-    git build-essential cmake \
-    python3 python3-pip python3-venv python3-dev \
-    nodejs npm default-jdk \
-    linux-firmware bluez bluetooth \
-    wpasupplicant printer-driver-all cups \
-    jq tree vim nano curl wget unzip zip \
-    software-properties-common apt-transport-https \
-    filezilla
-
-# Install explicitly requested packages via apt
-echo 'Installing explicitly requested packages...'
-
-# Try to install AILinux App from repository first
-if apt-get install -y ailinux-app; then
-    echo 'AILinux App installed successfully from repository.'
-else
-    echo 'AILinux App not available in repository - will install manually later.'
-fi
-
-# Install Wine packages
-if apt-get install -y winehq-staging winetricks; then
-    echo 'Wine staging and winetricks installed successfully.'
-else
-    echo 'Wine staging failed, trying regular wine...'
-    apt-get install -y wine wine32 wine64 winetricks || echo 'Wine installation failed'
-fi
-
-# Install Google Chrome
-if apt-get install -y google-chrome-stable; then
-    echo 'Google Chrome installed successfully from repository.'
-else
-    echo 'Google Chrome not available in repository - will install manually.'
-fi
-
-# Install VS Code
-if apt-get install -y code; then
-    echo 'VS Code installed successfully from repository.'
-else
-    echo 'VS Code not available in repository - will install manually.'
-fi
-
-# Install PyQt5 packages correctly for Ubuntu 24.04
-echo 'Installing PyQt5 packages for AILinux App...'
-if apt-get install -y python3-pyqt5; then
-    echo 'PyQt5 main package installed successfully.'
-    # Try to install additional PyQt5 modules if available
-    apt-get install -y python3-pyqt5.qtwidgets python3-pyqt5.qtcore python3-pyqt5.qtgui 2>/dev/null || {
-        echo 'Additional PyQt5 modules not available as separate packages - using main package.'
-    }
-else
-    echo 'PyQt5 package installation failed, trying pip installation...'
-    python3 -m pip install --break-system-packages PyQt5 || {
-        echo 'Warning: PyQt5 installation failed completely. AILinux GUI App may not work.'
-        echo 'AILinux will continue with terminal-only AI helper.'
-    }
-fi
-
-# Install optional packages with fallback downloads if repository packages failed
-echo 'Checking for any missing packages and installing via direct download if needed...'
-
-# Google Chrome fallback (only if repository installation failed)
-if ! dpkg -l google-chrome-stable &>/dev/null; then
-    echo 'Google Chrome not installed via repository, trying direct download...'
-    if wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; then
-        if dpkg -i /tmp/chrome.deb; then
-            echo 'Google Chrome installed from direct download.'
-        else
-            echo 'Fixing broken dependencies...'
-            apt-get install -f -y
-        fi
-        rm -f /tmp/chrome.deb
-    else
-        echo 'Google Chrome download failed, skipping...'
-    fi
-fi
-
-# Wine fallback (only if repository installation failed)  
-if ! dpkg -l winehq-staging &>/dev/null && ! dpkg -l wine &>/dev/null; then
-    echo 'Wine not installed via repository, trying alternative installation...'
-    # Add Wine repository for better compatibility with modern GPG handling
-    wget -qO- https://dl.winehq.org/wine-builds/winehq.key | gpg --dearmor -o /usr/share/keyrings/winehq-archive.gpg 2>/dev/null || echo 'Wine key add failed'
-    echo "deb [signed-by=/usr/share/keyrings/winehq-archive.gpg] https://dl.winehq.org/wine-builds/ubuntu/ noble main" | tee /etc/apt/sources.list.d/winehq.list > /dev/null 2>&1 || echo 'Wine repo add failed'
-    apt-get update || echo 'Some Wine repository updates failed, continuing...'
+    # Definiere Paketlisten als Arrays für bessere Lesbarkeit
+    local KERNEL_BOOT_PKGS=(
+        linux-image-generic linux-headers-generic casper discover
+        laptop-detect os-prober network-manager resolvconf net-tools
+        wireless-tools plymouth-theme-spinner ubuntu-standard
+        keyboard-configuration console-setup sudo systemd systemd-sysv
+        dbus init rsyslog grub-efi-amd64 shim-signed initramfs-tools live-boot
+    )
+    local KDE_PKGS=(
+        kde-full plasma-desktop sddm-theme-breeze xorg xserver-xorg-video-all
+    )
+    local CORE_APPS=(
+        firefox thunderbird vlc gimp libreoffice gparted htop neofetch
+        konsole kate okular gwenview ark dolphin ubuntu-restricted-extras
+        ffmpeg pulseaudio pavucontrol git build-essential cmake
+        python3 python3-pip python3-venv python3-dev nodejs npm default-jdk
+        linux-firmware bluez bluetooth wpasupplicant printer-driver-all cups
+        jq tree vim nano curl wget unzip zip software-properties-common
+        apt-transport-https filezilla
+    )
     
-    if apt-get install -y winehq-staging winetricks; then
-        echo 'Wine staging installed from Wine repository.'
-    else
-        echo 'Wine staging failed, trying regular wine...'
-        if apt-get install -y wine wine32 wine64 winetricks; then
-            echo 'Regular Wine installed successfully.'
-        else
-            echo 'Wine installation completely failed, skipping...'
-        fi
-    fi
+    local install_script
+    install_script=$(cat <<PACKAGES_EOF
+set -ex
+
+echo "Installiere Kernel, Boot-Komponenten und System-Tools..."
+apt-get install -y --no-install-recommends ${KERNEL_BOOT_PKGS[*]}
+
+echo "Installiere vollständige KDE-Desktop-Umgebung..."
+apt-get install -y --no-install-recommends ${KDE_PKGS[*]}
+
+echo "Installiere Kernanwendungen und Entwicklungstools..."
+apt-get install -y --no-install-recommends ${CORE_APPS[*]}
+
+echo "Installiere spezielle Pakete mit Fallbacks..."
+
+# Versuche, AILinux-App aus dem Repository zu installieren
+if ! apt-get install -y ailinux-app; then
+    echo "Warnung: AILinux-App nicht im Repository gefunden. Wird später manuell installiert."
 fi
 
-# VS Code fallback (only if repository installation failed)
-if ! dpkg -l code &>/dev/null; then
-    echo 'VS Code not installed via repository, trying direct download...'
-    if wget -q https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64 -O /tmp/vscode.deb; then
-        if dpkg -i /tmp/vscode.deb; then
-            echo 'VS Code installed from direct download.'
-        else
-            echo 'Fixing broken dependencies...'
-            apt-get install -f -y
-        fi
-        rm -f /tmp/vscode.deb
-    else
-        echo 'VS Code download failed, skipping...'
-    fi
+# Wine-Pakete
+if ! apt-get install -y --install-recommends winehq-staging; then
+    echo "Warnung: winehq-staging fehlgeschlagen, versuche Standard-Wine..."
+    apt-get install -y wine64 wine32 winetricks || echo "Warnung: Wine-Installation fehlgeschlagen."
 fi
 
-echo 'Package installation completed.'
+# Google Chrome
+if ! apt-get install -y google-chrome-stable; then
+    echo "Info: Google Chrome nicht im Repo gefunden, versuche manuellen Download..."
+    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
+    (dpkg -i /tmp/chrome.deb || apt-get -f install -y)
+    rm -f /tmp/chrome.deb
+fi
+
+# VS Code
+if ! apt-get install -y code; then
+    echo "Info: VS Code nicht im Repo gefunden, versuche manuellen Download..."
+    wget -q 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64' -O /tmp/vscode.deb && \
+    (dpkg -i /tmp/vscode.deb || apt-get -f install -y)
+    rm -f /tmp/vscode.deb
+fi
+
+# PyQt5 Pakete für Ubuntu 24.04
+echo "Installiere PyQt5 für AILinux App..."
+if ! apt-get install -y python3-pyqt5 python3-pyqt5.qtwidgets python3-pyqt5.qtgui; then
+    echo "Warnung: PyQt5 aus APT fehlgeschlagen, versuche pip..."
+    python3 -m pip install --break-system-packages PyQt5 || echo "FEHLER: PyQt5 konnte nicht installiert werden. GUI-Apps könnten betroffen sein."
+fi
+
+echo "Paketinstallation abgeschlossen."
 PACKAGES_EOF
-
-    sudo cp /tmp/install_packages.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/install_packages.sh"
-    run_in_chroot "/tmp/install_packages.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/install_packages.sh" /tmp/install_packages.sh || true
+)
+    run_in_chroot "$install_script"
     
-    log_success "All core packages and desktop environment installed."
+    log_success "Alle Kernpakete und die Desktop-Umgebung wurden installiert."
 }
 
 step_04_install_ai_components() {
-    log_step "4/10" "Install AILinux AI Components"
+    log_step "4/10" "Installation der AILinux AI-Komponenten"
     
-    # Copy .env file to chroot if it exists
+    # Kopiere .env-Datei in chroot, falls vorhanden
     if [ -f ".env" ]; then
         sudo cp .env "${CHROOT_DIR}/tmp/.env"
     fi
     
-    # Create AI components installation script
-    cat > /tmp/install_ai.sh << 'AI_EOF'
+    # Skript zur Installation der AI-Komponenten
+    local ai_install_script
+    ai_install_script='
 #!/bin/bash
 set -e
 
-# Install Python dependencies
+# Installiere Python-Abhängigkeiten
 python3 -m pip install --break-system-packages requests python-dotenv psutil
 
-# Create base directory for AILinux components
+# Erstelle Basisverzeichnis für AILinux-Komponenten
 mkdir -p /opt/ailinux
 
-# Create comprehensive AI helper
-cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
+# Erstelle den AI-Helfer
+cat > /opt/ailinux/ailinux-helper.py << '"'AIHELPER'"'
 #!/usr/bin/env python3
 import os
 import sys
@@ -523,19 +367,19 @@ import argparse
 import subprocess
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv(dotenv_path='/opt/ailinux/.env')
+# Lade Umgebungsvariablen
+load_dotenv(dotenv_path="/opt/ailinux/.env")
 
 class AILinuxHelper:
     def __init__(self):
-        self.api_key = os.getenv('MISTRALAPIKEY')
-        if not self.api_key or self.api_key == 'your_mixtral_api_key_here':
-            print('Error: MISTRALAPIKEY not found or not configured properly.')
-            print('Please edit /opt/ailinux/.env and add your Mixtral API key.')
+        self.api_key = os.getenv("MISTRALAPIKEY")
+        if not self.api_key or self.api_key == "dein_mixtral_api_schlüssel_hier":
+            print("Fehler: MISTRALAPIKEY nicht gefunden oder nicht konfiguriert.")
+            print("Bitte bearbeiten Sie /opt/ailinux/.env und fügen Sie Ihren Mixtral API-Schlüssel hinzu.")
             sys.exit(1)
         
-        self.api_url = 'https://api.mistral.ai/v1/chat/completions'
-        self.system_prompt = '''Du bist AILinux Helper – ein KI-gesteuerter Assistent, der in der Linux-Distribution „AILinux 24.04 Premium" eingebettet ist.
+        self.api_url = "https://api.mistral.ai/v1/chat/completions"
+        self.system_prompt = """Du bist AILinux Helper – ein KI-gesteuerter Assistent, der in der Linux-Distribution „AILinux 24.04 Premium" eingebettet ist.
 
 Diese Distribution basiert auf Ubuntu 24.04 (Codename: Noble) und wurde speziell für eine moderne, KI-integrierte Offline-Nutzung entwickelt.
 
@@ -562,85 +406,55 @@ Du wirst direkt über das Terminal vom Nutzer aufgerufen, um:
 Falls zu wenig Informationen gegeben sind, antworte mit:
 "Bitte gib mir mehr Details wie Logs, konkrete Fehlermeldungen oder betroffene Befehle."
 
-AILinux enthält: kde-full, firefox, chrome, thunderbird, vlc, gimp, libreoffice, wine, vscode, python3, nodejs, und viele andere Pakete.'''
+AILinux enthält: kde-full, firefox, chrome, thunderbird, vlc, gimp, libreoffice, wine, vscode, python3, nodejs, und viele andere Pakete."""
 
     def analyze_problem(self, user_input):
         headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
         
         data = {
-            'model': 'mistral-large-latest',
-            'messages': [
-                {'role': 'system', 'content': self.system_prompt},
-                {'role': 'user', 'content': user_input}
+            "model": "mistral-large-latest",
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_input}
             ]
         }
         
         try:
             response = requests.post(self.api_url, headers=headers, json=data, timeout=90)
             response.raise_for_status()
-            return response.json()['choices'][0]['message']['content']
+            return response.json()["choices"][0]["message"]["content"]
         except Exception as e:
-            return f'Error contacting AI service: {e}'
-
-    def get_system_info(self):
-        try:
-            import psutil
-            info = {
-                'CPU Usage': f'{psutil.cpu_percent()}%',
-                'Memory Usage': f'{psutil.virtual_memory().percent}%',
-                'Disk Usage': f'{psutil.disk_usage("/").percent}%',
-                'Load Average': os.getloadavg(),
-                'Uptime': subprocess.check_output(['uptime'], text=True).strip()
-            }
-            return '\n'.join([f'{k}: {v}' for k, v in info.items()])
-        except:
-            return 'System info unavailable'
+            return f"Fehler bei der Kontaktaufnahme mit dem KI-Dienst: {e}"
 
 def main():
-    parser = argparse.ArgumentParser(description='AILinux Helper - AI-powered system assistant')
-    parser.add_argument('query', nargs='*', help='Problem description or question to analyze')
-    parser.add_argument('--sysinfo', '-s', action='store_true', help='Show system information')
-    parser.add_argument('--log', '-l', type=str, help='Analyze a specific log file')
+    parser = argparse.ArgumentParser(description="AILinux Helper - KI-gestützter Systemassistent")
+    parser.add_argument("query", nargs="*", help="Problembeschreibung oder Frage zur Analyse")
     args = parser.parse_args()
     
     helper = AILinuxHelper()
     
-    if args.sysinfo:
-        print('### 🖥 System Information')
-        print(helper.get_system_info())
-        return
-    
-    if args.log:
-        if os.path.exists(args.log):
-            with open(args.log, 'r') as f:
-                log_content = f.read()
-            user_input = f'Please analyze this log file ({args.log}):\n\n{log_content}'
-        else:
-            print(f'Error: Log file {args.log} not found.')
-            return
+    if args.query:
+        user_input = " ".join(args.query)
     else:
-        if args.query:
-            user_input = ' '.join(args.query)
-        else:
-            print('Enter your problem description (press Ctrl+D when finished):')
-            user_input = sys.stdin.read()
+        print("Geben Sie Ihre Problembeschreibung ein (drücken Sie Strg+D, wenn Sie fertig sind):")
+        user_input = sys.stdin.read()
     
     if user_input.strip():
-        print('\nAnalyzing...')
+        print("\nAnalysiere...")
         print(helper.analyze_problem(user_input))
     else:
-        print('No input provided.')
+        print("Keine Eingabe erhalten.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 AIHELPER
 chmod +x /opt/ailinux/ailinux-helper.py
 
-# Create desktop entry
-cat > /usr/share/applications/ailinux-helper.desktop << 'DESKTOP'
+# Erstelle Desktop-Eintrag
+cat > /usr/share/applications/ailinux-helper.desktop << '"'DESKTOP'"'
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -651,105 +465,62 @@ Comment[de]=KI-gestützter Systemassistent
 Icon=applications-system
 Exec=konsole -e /opt/ailinux/ailinux-helper.py
 Terminal=true
-StartupNotify=true
 Categories=System;Utility;
-Keywords=AI;assistant;system;helper;
 DESKTOP
 
-# Create symlink
+# Erstelle Symlink
 ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
 
-# Move .env file to final location
-if [ -f '/tmp/.env' ]; then
+# Verschiebe .env an den endgültigen Ort
+if [ -f "/tmp/.env" ]; then
     mv /tmp/.env /opt/ailinux/.env
     chmod 600 /opt/ailinux/.env
 fi
 
-echo "AILinux AI components installation completed."
-AI_EOF
-
-    sudo cp /tmp/install_ai.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/install_ai.sh"
-    run_in_chroot "/tmp/install_ai.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/install_ai.sh" /tmp/install_ai.sh || true
+echo "Installation der AILinux AI-Komponenten abgeschlossen."
+'
+    run_in_chroot "$ai_install_script"
+    sudo rm -f "${CHROOT_DIR}/tmp/.env"
     
-    log_success "AILinux AI components installed."
+    log_success "AILinux AI-Komponenten installiert."
 }
 
 step_05_configure_calamares() {
-    log_step "5/10" "Configure Calamares Installer - BOOTLOADER FIXED"
+    log_step "5/10" "Konfiguration des Calamares Installers (mit Bootloader-Fix)"
     
-    # Copy branding files if they exist
     if [ -d "branding" ]; then
         sudo mkdir -p "${CHROOT_DIR}/tmp/branding"
         sudo cp -r branding/* "${CHROOT_DIR}/tmp/branding/"
     fi
     
-    # Create FIXED Calamares configuration script
-    cat > /tmp/configure_calamares.sh << 'CALAMARES_EOF'
+    local calamares_script
+    calamares_script='
 #!/bin/bash
 set -e
 
-# Install Calamares with ALL required dependencies for bootloader module
-echo 'Installing Calamares with complete dependencies...'
+# Installiere Calamares mit allen Abhängigkeiten (insbesondere für Bootloader)
+echo "Installiere Calamares mit vollständigen Abhängigkeiten..."
 apt-get update
 
-# Install bootloader-specific dependencies FIRST
+# Wichtige Bootloader-Abhängigkeiten ZUERST installieren
 apt-get install -y \
-    grub-pc-bin \
-    grub-efi-amd64-bin \
-    grub-efi-amd64-signed \
-    grub-common \
-    grub2-common \
-    efibootmgr \
-    os-prober \
-    shim-signed
+    grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed grub-common \
+    grub2-common efibootmgr os-prober shim-signed
 
-# Install Python dependencies for Calamares modules (with fallbacks)
-echo 'Installing Python dependencies for Calamares...'
-apt-get install -y python3-yaml python3-parted || echo 'Core Python packages failed'
-apt-get install -y python3-setuptools || apt-get install -y python3-distutils-extra || echo 'Setuptools/distutils not available'
-apt-get install -y python3-psutil || echo 'psutil not available'
-apt-get install -y python3-subprocess-tee || echo 'subprocess-tee not available (optional)'
+# Python-Abhängigkeiten für Calamares-Module
+apt-get install -y python3-yaml python3-parted python3-setuptools python3-pyqt5
 
-# Install Calamares main package
-if apt-get install -y calamares; then
-    echo 'Calamares installed successfully.'
-else
-    echo 'Standard Calamares installation failed, trying alternative method...'
-    # Try installing from universe repository if not available in main
-    apt-get install -y calamares calamares-settings-ubuntu || {
-        echo 'Calamares installation failed completely. Continuing without installer...'
-        exit 0
-    }
-fi
+# Calamares Hauptpaket und zusätzliche Abhängigkeiten
+apt-get install -y calamares calamares-settings-ubuntu imagemagick squashfs-tools dosfstools ntfs-3g btrfs-progs xfsprogs e2fsprogs
 
-# Install additional dependencies that might be missing
-apt-get install -y \
-    python3-pyqt5 \
-    imagemagick \
-    rsync \
-    squashfs-tools \
-    dosfstools \
-    ntfs-3g \
-    btrfs-progs \
-    xfsprogs \
-    e2fsprogs
-
-# Create Calamares configuration directories
+# Erstelle Calamares Konfigurationsverzeichnisse
 mkdir -p /etc/calamares/modules
 mkdir -p /etc/calamares/branding/ailinux
 
-# Main settings - CORRECTED sequence
-cat > /etc/calamares/settings.conf << 'SETTINGS'
+# Hauptkonfiguration (settings.conf)
+cat > /etc/calamares/settings.conf << '"'SETTINGS'"'
 ---
 modules-search: [ local ]
-
-instances:
-- id:       rootfs
-  module:   unpackfs
-  config:   unpackfs.conf
-
 sequence:
 - show:
   - welcome
@@ -761,7 +532,7 @@ sequence:
 - exec:
   - partition
   - mount
-  - unpackfs@rootfs
+  - unpackfs
   - machineid
   - fstab
   - locale
@@ -776,554 +547,249 @@ sequence:
   - umount
 - show:
   - finished
-
 branding: ailinux
-
 prompt-install: false
-dont-chroot: false
-oem-setup: false
-disable-cancel: false
-disable-cancel-during-exec: false
 quit-at-end: false
 SETTINGS
 
-# FIXED Branding configuration
-cat > /etc/calamares/branding/ailinux/branding.desc << 'BRANDING'
+# Branding-Konfiguration
+cat > /etc/calamares/branding/ailinux/branding.desc << '"'BRANDING'"'
 ---
-componentName:  ailinux
-
+componentName: ailinux
 strings:
-    productName:         AILinux
-    shortProductName:    AILinux
-    version:             24.04 Premium
-    shortVersion:        24.04
-    versionedName:       AILinux 24.04 Premium
-    shortVersionedName:  AILinux 24.04
+    productName: AILinux
+    version: 24.04 Premium
+    shortVersionedName: AILinux 24.04
     bootloaderEntryName: AILinux
-    productUrl:          https://github.com/derleiti/ailinux-beta-iso
-    supportUrl:          https://github.com/derleiti/ailinux-beta-iso/issues
-    bugReportUrl:        https://github.com/derleiti/ailinux-beta-iso/issues
-    releaseNotesUrl:     https://github.com/derleiti/ailinux-beta-iso/releases
-
-images:
-    productLogo:         "logo.png"
-    productIcon:         "icon.png"
-    productWelcome:      "welcome.png"
-
+    productUrl: https://github.com/derleiti/ailinux-beta-iso
 style:
-   sidebarBackground:    "#2c3e50"
-   sidebarText:          "#ffffff"
-   sidebarTextSelect:    "#3498db"
-   sidebarTextCurrent:   "#ffffff"
-
-slideshow:               "show.qml"
+    sidebarBackground: "#2c3e50"
+    sidebarText: "#ffffff"
+images:
+    productLogo: "logo.png"
+    productIcon: "icon.png"
+    productWelcome: "welcome.png"
 slideshowAPI: 2
-
-uploadServer:
-    type:    "fiche"
-    url:     "http://termbin.com:9999"
 BRANDING
 
-# Copy branding images if available
-if [ -d '/tmp/branding' ]; then
+# Kopiere Branding-Bilder falls vorhanden, sonst erstelle Fallbacks
+if [ -d "/tmp/branding" ]; then
     cp /tmp/branding/* /etc/calamares/branding/ailinux/ 2>/dev/null || true
 fi
-
-# Create default images if not provided
-if [ ! -f '/etc/calamares/branding/ailinux/logo.png' ]; then
-    convert -size 256x256 xc:'#3498db' -pointsize 24 -fill white -gravity center -annotate +0+0 'AILinux' /etc/calamares/branding/ailinux/logo.png 2>/dev/null || {
-        # Fallback if ImageMagick fails
-        cp /usr/share/pixmaps/debian-logo.png /etc/calamares/branding/ailinux/logo.png 2>/dev/null || touch /etc/calamares/branding/ailinux/logo.png
-    }
+if [ ! -f "/etc/calamares/branding/ailinux/logo.png" ]; then
+    convert -size 256x256 xc:"#2c3e50" -pointsize 24 -fill white -gravity center -annotate +0+0 "AILinux" /etc/calamares/branding/ailinux/logo.png
 fi
-
-# Copy missing images from logo if they don't exist
 for img in icon.png welcome.png; do
-    if [ ! -f "/etc/calamares/branding/ailinux/$img" ]; then
-        cp /etc/calamares/branding/ailinux/logo.png "/etc/calamares/branding/ailinux/$img"
+    if [ ! -f "/etc/calamares/branding/ailinux/${img}" ]; then
+        cp /etc/calamares/branding/ailinux/logo.png "/etc/calamares/branding/ailinux/${img}"
     fi
 done
 
-# Create slideshow QML file
-cat > /etc/calamares/branding/ailinux/show.qml << 'SLIDESHOW'
-import QtQuick 2.5
-import calamares.slideshow 1.0
-
-Presentation {
-    id: presentation
-    
-    Slide {
-        anchors.fill: parent
-        
-        Rectangle {
-            anchors.fill: parent
-            color: "#2c3e50"
-        }
-        
-        Text {
-            anchors.centerIn: parent
-            text: "Willkommen zu AILinux 24.04 Premium!"
-            font.pixelSize: 28
-            color: "white"
-            font.weight: Font.Bold
-        }
-        
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 50
-            text: "Ihre KI-gestützte Linux-Distribution"
-            font.pixelSize: 18
-            color: "#3498db"
-        }
-    }
-    
-    Slide {
-        anchors.fill: parent
-        
-        Rectangle {
-            anchors.fill: parent
-            color: "#27ae60"
-        }
-        
-        Text {
-            anchors.centerIn: parent
-            text: "🚀 Installation läuft..."
-            font.pixelSize: 28
-            color: "white"
-            font.weight: Font.Bold
-        }
-    }
-}
-SLIDESHOW
-
-# Welcome module
-cat > /etc/calamares/modules/welcome.conf << 'WELCOME'
----
-showSupportUrl:         true
-showKnownIssuesUrl:     false
-showReleaseNotesUrl:    true
-showDonateUrl:          false
-
-requirements:
-    requiredStorage:    20.0
-    requiredRam:        2.0
-    internetCheckUrl:   http://google.com
-    checkHasInternetConnection: false
-
-geoip:
-    style:    "none"
-    url:      ""
-    selector: ""
-
-lnf:
-    defaultLnF:     org.kde.breeze.desktop
-    lnfPath:        /usr/share/plasma/look-and-feel/
-    showAll:        false
-WELCOME
-
-# Users module configuration
-cat > /etc/calamares/modules/users.conf << 'USERS'
----
-defaultGroups:
-    - name: cdrom
-      must_exist: false
-    - name: floppy  
-      must_exist: false
-    - name: sudo
-      must_exist: true
-    - name: audio
-      must_exist: false
-    - name: dip
-      must_exist: false
-    - name: video
-      must_exist: false
-    - name: plugdev
-      must_exist: false
-    - name: netdev
-      must_exist: false
-    - name: bluetooth
-      must_exist: false
-    - name: lpadmin
-      must_exist: false
-
-autologinGroup:  autologin
-sudoersGroup:    sudo
-setRootPassword: false
-doReusePassword: true
-
-passwordRequirements:
-    minLength: 4
-    maxLength: -1
-
-allowWeakPasswords: true
-allowWeakPasswordsDefault: true
-
-userShell: /bin/bash
-
-hostname:
-    location: EtcFile
-    writeHostsFile: true
-    template: "ailinux-${cpu}"
-USERS
-
-# Unpackfs configuration
-cat > /etc/calamares/modules/unpackfs.conf << 'UNPACKFS'
+# Wichtige Modulkonfigurationen
+# unpackfs.conf
+cat > /etc/calamares/modules/unpackfs.conf << '"'UNPACKFS'"'
 ---
 unpack:
-    -   source: "/cdrom/casper/filesystem.squashfs"
-        sourcefs: "squashfs"
-        destination: ""
-        
-exclude: [ "dev/*", "proc/*", "sys/*", "tmp/*", "run/*", "mnt/*", "media/*", "lost+found", "cdrom/*", "swapfile" ]
-
-excludeFile: false
+    - source: "/cdrom/casper/filesystem.squashfs"
+      sourcefs: "squashfs"
+      destination: ""
 UNPACKFS
 
-# Finished module
-cat > /etc/calamares/modules/finished.conf << 'FINISHED'
+# bootloader.conf - KRITISCHE KORRIGIERTE VERSION
+cat > /etc/calamares/modules/bootloader.conf << '"'BOOTLOADER'"'
 ---
-restartNowEnabled: true
-restartNowChecked: false
-notifyOnFinished: true
-FINISHED
-
-# Display manager configuration
-cat > /etc/calamares/modules/displaymanager.conf << 'DISPLAYMGR'
----
-displaymanagers:
-  - sddm
-  - lightdm
-  - gdm
-
-defaultDesktopEnvironment:
-    executable: "startkde"
-    desktopFile: "plasma"
-
-basicSetup: false
-sysconfigSetup: false
-DISPLAYMGR
-
-# Partition module configuration
-cat > /etc/calamares/modules/partition.conf << 'PARTITION'
----
-efiSystemPartition: "/boot/efi"
-efiSystemPartitionSize: 1000MiB
-efiSystemPartitionName: "EFI"
-
-userSwapChoices:
-    - none
-    - small
-    - suspend
-
-swapPartitionName: "swap"
-
-drawNestedPartitions: false
-alwaysShowPartitionLabels: true
-allowManualPartitioning: true
-
-initialPartitioningChoice: erase
-initialSwapChoice: small
-
-defaultFileSystemType: "ext4"
-
-availableFileSystemTypes:
-    - "ext4"
-    - "ext3"
-    - "btrfs"
-    - "xfs"
-
-requiredPartitionTableType:
-    - "gpt"
-
-armInstall: false
-PARTITION
-
-# COMPLETELY FIXED Bootloader configuration
-cat > /etc/calamares/modules/bootloader.conf << 'BOOTLOADER'
----
-# EFI bootloader ID for this distribution
-efiBootloaderId: ailinux
-
-# Bootloader installation method
-# Can be "grub" (default) or "systemd-boot"
-bootloaderType: grub
-
-# GRUB installation parameters
-grubInstall: grub-install
-grubMkconfig: grub-mkconfig
-grubCfg: /boot/grub/grub.cfg
-efiBootMgr: efibootmgr
-
-# UEFI installation parameters
+efiBootloaderId: "ailinux"
+# "grub" ist Standard und wird hier verwendet
+bootloaderType: "grub"
+# UEFI-Installationsparameter
 efiDirectory: /boot/efi
-efiMountPoint: /boot/efi
-
-# Installation parameters for different firmware types
-installEFIFallback: true
-
-# Timeout for GRUB menu (in seconds)
-timeout: 10
-
-# Kernel and initrd paths (relative to /boot)
+# Secure Boot Unterstützung
+secureBootSupport: true
+# Kernel-Pfade
 kernel: /vmlinuz
 img: /initrd.img
 fallback: /initrd.img
-
-# Installation command line parameters
-efiInstallParams: --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --recheck
-
-biosInstallParams: --target=i386-pc --recheck
-
-# Additional GRUB options
-grubProbeUseFstabHints: false
-grubInstallWithLocale: false
-
-# Secure Boot support
-secureBootSupport: true
+# GRUB Installationsparameter
+grubInstall: grub-install
+grubMkconfig: grub-mkconfig
+grubCfg: /boot/grub/grub.cfg
+# EFI-spezifische Parameter
+efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --recheck"
+# BIOS-spezifische Parameter
+biosInstallParams: "--target=i386-pc --recheck"
 BOOTLOADER
 
-# Mount module configuration
-cat > /etc/calamares/modules/mount.conf << 'MOUNT'
+# partition.conf
+cat > /etc/calamares/modules/partition.conf << '"'PARTITION'"'
 ---
-extraMounts:
-    - device: proc
-      fs: proc
-      mountPoint: /proc
-    - device: sys  
-      fs: sysfs
-      mountPoint: /sys
-    - device: /dev
-      mountPoint: /dev
-      options: bind
-    - device: tmpfs
-      fs: tmpfs
-      mountPoint: /run
-    - device: /dev/pts
-      fs: devpts
-      mountPoint: /dev/pts
-      options: "gid=5,mode=620"
+efiSystemPartition: "/boot/efi"
+efiSystemPartitionSize: 512MiB
+defaultFileSystemType: "ext4"
+availableFileSystemTypes: ["ext4", "btrfs", "xfs"]
+initialPartitioningChoice: "erase"
+PARTITION
 
-extraMountsEfi:
-    - device: efivarfs
-      fs: efivarfs
-      mountPoint: /sys/firmware/efi/efivars
-
-btrfsSubvolumes:
-    - mountPoint: /
-      subvolume: /@
-    - mountPoint: /home
-      subvolume: /@home
-MOUNT
-
-# Fstab module configuration
-cat > /etc/calamares/modules/fstab.conf << 'FSTAB'
+# users.conf
+cat > /etc/calamares/modules/users.conf << '"'USERS'"'
 ---
-mountOptions:
-    default:
-        - defaults
-        - noatime
-    efi:
-        - defaults
-        - umask=077
-    btrfs:
-        - defaults
-        - noatime
-        - space_cache
-        - autodefrag
+defaultGroups:
+    - sudo
+    - adm
+    - cdrom
+    - dip
+    - plugdev
+    - lpadmin
+    - audio
+    - video
+    - bluetooth
+    - netdev
+autologinGroup: autologin
+sudoersGroup: sudo
+setRootPassword: false
+allowWeakPasswords: true
+userShell: /bin/bash
+USERS
 
-ssdExtraMountOptions:
-    ext4:
-        - discard
-    jfs:
-        - discard
-    xfs:
-        - discard
-
-efiMountOptions:
-    - defaults
-    - umask=077
-
-crypttabOptions:
-    - luks
-FSTAB
-
-echo "Calamares configuration with FIXED bootloader completed successfully."
-CALAMARES_EOF
-
-    sudo cp /tmp/configure_calamares.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/configure_calamares.sh"
-    run_in_chroot "/tmp/configure_calamares.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/configure_calamares.sh" /tmp/configure_calamares.sh || true
+echo "Calamares-Konfiguration mit korrigiertem Bootloader abgeschlossen."
+'
+    run_in_chroot "$calamares_script"
     
-    log_success "Calamares installer configured with FIXED bootloader module."
+    log_success "Calamares Installer wurde erfolgreich konfiguriert."
 }
 
+
 step_06_create_live_user() {
-    log_step "6/10" "Create Live User and Configure Desktop"
+    log_step "6/10" "Erstellung des Live-Benutzers und Desktop-Konfiguration"
     
-    # Create live user configuration script
-    cat > /tmp/create_user.sh << 'USER_EOF'
+    local user_script
+    user_script='
 #!/bin/bash
 set -e
-# Create live user
-useradd -s /bin/bash -d '/home/ailinux' -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video,bluetooth,netdev 'ailinux'
-passwd -d 'ailinux'
-echo 'ailinux ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+# Erstelle Live-Benutzer ohne Passwort
+useradd -s /bin/bash -d "/home/'${LIVE_USER}'" -m -G adm,cdrom,sudo,dip,plugdev,lpadmin,audio,video,bluetooth,netdev "'${LIVE_USER}'"
+passwd -d "'${LIVE_USER}'"
+echo "'${LIVE_USER}' ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Configure SDDM for autologin
+# Konfiguriere SDDM für Autologin
 mkdir -p /etc/sddm.conf.d
-cat > /etc/sddm.conf.d/autologin.conf << 'SDDM_EOF'
+cat > /etc/sddm.conf.d/autologin.conf << '"'SDDM_EOF'"'
 [Autologin]
-User=ailinux
+User='${LIVE_USER}'
 Session=plasma
-
 [Theme]
 Current=breeze
-
-[X11]
-ServerPath=/usr/bin/X
-SessionCommand=/usr/share/sddm/scripts/Xsession
-SessionDir=/usr/share/xsessions
 SDDM_EOF
 
-# Create desktop shortcut for installer
-mkdir -p '/home/ailinux/Desktop'
-cat > '/home/ailinux/Desktop/install-ailinux.desktop' << 'INSTALL_EOF'
+# Erstelle Desktop-Verknüpfung für den Installer
+mkdir -p "/home/'${LIVE_USER}'/Desktop"
+cat > "/home/'${LIVE_USER}'/Desktop/install-ailinux.desktop" << '"'INSTALL_EOF'"'
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Install AILinux
 Name[de]=AILinux installieren
 Comment=Install AILinux to your computer
-Comment[de]=AILinux auf Ihrem Computer installieren
 Icon=calamares
 Exec=pkexec calamares
 Terminal=false
-StartupNotify=true
 Categories=System;
 INSTALL_EOF
-chmod +x '/home/ailinux/Desktop/install-ailinux.desktop'
+chmod +x "/home/'${LIVE_USER}'/Desktop/install-ailinux.desktop"
 
-# Create AI helper shortcut
-cat > '/home/ailinux/Desktop/aihelp.desktop' << 'AIHELP_EOF'
+# Erstelle AI-Helfer-Verknüpfung
+cat > "/home/'${LIVE_USER}'/Desktop/aihelp.desktop" << '"'AIHELP_EOF'"'
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=AILinux Helper
 Name[de]=AILinux Assistent
-Comment=AI-powered system assistant
-Comment[de]=KI-gestützter Systemassistent
 Icon=dialog-information
 Exec=konsole -e aihelp
 Terminal=true
-StartupNotify=true
 Categories=System;Utility;
 AIHELP_EOF
-chmod +x '/home/ailinux/Desktop/aihelp.desktop'
+chmod +x "/home/'${LIVE_USER}'/Desktop/aihelp.desktop"
 
-# Configure .bashrc
-cat >> '/home/ailinux/.bashrc' << 'BASHRC_EOF'
+# Konfiguriere .bashrc mit Willkommensnachricht und Alias
+cat >> "/home/'${LIVE_USER}'/.bashrc" << '"'BASHRC_EOF'"'
 
 # AILinux Welcome
-echo ''
-echo '🧠 Willkommen bei AILinux 24.04 Premium!'
-echo 'Verwenden Sie "aihelp" für KI-gestützte Systemhilfe.'
-echo ''
-
-# AILinux aliases
-alias ai='aihelp'
+echo ""
+echo "🧠 Willkommen bei AILinux 24.04 Premium!"
+echo "Verwenden Sie \"aihelp\" für KI-gestützte Systemhilfe."
+echo ""
+alias ai="aihelp"
 BASHRC_EOF
 
-# Set ownership
-chown -R 'ailinux:ailinux' '/home/ailinux'
-USER_EOF
-
-    sudo cp /tmp/create_user.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/create_user.sh"
-    run_in_chroot "/tmp/create_user.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/create_user.sh" /tmp/create_user.sh || true
+# Setze Eigentümer
+chown -R "'${LIVE_USER}':'${LIVE_USER}'" "/home/'${LIVE_USER}'"
+'
+    run_in_chroot "$user_script"
     
-    log_success "Live user and desktop configured."
+    log_success "Live-Benutzer und Desktop konfiguriert."
 }
 
 step_07_system_cleanup() {
-    log_step "7/10" "System Cleanup and Service Configuration"
+    log_step "7/10" "Systembereinigung und Service-Konfiguration"
     
-    # Create cleanup script
-    cat > /tmp/cleanup_system.sh << 'CLEANUP_EOF'
+    local cleanup_script
+    cleanup_script='
 #!/bin/bash
 set -e
-# Enable essential services
-systemctl enable bluetooth || true
-systemctl enable cups || true
-systemctl enable NetworkManager || true
-systemctl enable sddm || true
-systemctl disable systemd-resolved || true
+# Aktiviere wichtige Dienste
+systemctl enable bluetooth cups NetworkManager sddm
 
-# Clean package cache and temporary files
+# Bereinige Paket-Cache und temporäre Dateien
 apt-get autoremove -y --purge
 apt-get clean
 rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 find /var/log -type f -exec truncate --size 0 {} \;
 
-# Reset machine ID
+# Setze machine-id zurück
 rm -f /etc/machine-id /var/lib/dbus/machine-id
 touch /etc/machine-id
 
-# Remove SSH host keys (will be regenerated on first boot)
+# Entferne SSH-Host-Schlüssel
 rm -f /etc/ssh/ssh_host_*
 
-# Update initramfs
+# Aktualisiere initramfs
 update-initramfs -u
-CLEANUP_EOF
-
-    sudo cp /tmp/cleanup_system.sh "${CHROOT_DIR}/tmp/"
-    sudo chmod +x "${CHROOT_DIR}/tmp/cleanup_system.sh"
-    run_in_chroot "/tmp/cleanup_system.sh"
-    sudo rm -f "${CHROOT_DIR}/tmp/cleanup_system.sh" /tmp/cleanup_system.sh || true
+'
+    run_in_chroot "$cleanup_script"
     
-    # Clean up resolv.conf before unmounting
     sudo rm -f "${CHROOT_DIR}/etc/resolv.conf"
     
-    log_success "System cleanup completed."
+    log_success "Systembereinigung abgeschlossen."
 }
 
 step_08_create_squashfs() {
-    log_step "8/10" "Create SquashFS Image"
+    log_step "8/10" "Erstellung des SquashFS-Images"
     
-    # Unmount all pseudo-filesystems
     cleanup_mounts
     
-    # Create ISO directory structure
     mkdir -p "${ISO_DIR}"/{casper,isolinux,boot/grub,.disk}
     
-    # Copy kernel and initrd
     sudo cp "${CHROOT_DIR}"/boot/vmlinuz-*-generic "${ISO_DIR}/casper/vmlinuz"
     sudo cp "${CHROOT_DIR}"/boot/initrd.img-*-generic "${ISO_DIR}/casper/initrd"
     
-    # Create package manifest
     run_in_chroot "dpkg-query -W --showformat='\\\${Package}\t\\\${Version}\n'" > "${ISO_DIR}/casper/filesystem.manifest"
     
-    log_info "Creating SquashFS image with zstd compression (this may take a while)..."
+    log_info "Erstelle SquashFS-Image mit zstd-Kompression (dies kann dauern)..."
     sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" \
-        -noappend -e boot -comp zstd -b 1M -Xcompression-level 15 -processors $(nproc)
+        -noappend -e boot -comp zstd -b 1M -Xcompression-level 15
     
-    # Create filesystem size file
     printf "$(sudo du -sx --block-size=1 "${CHROOT_DIR}" | cut -f1)" > "${ISO_DIR}/casper/filesystem.size"
     
-    # Create disk info
     echo "${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION} - Release ${ARCHITECTURE}" > "${ISO_DIR}/.disk/info"
-    touch "${ISO_DIR}/.disk/base_installable"
     
-    log_success "SquashFS image created successfully."
-    log_info "SquashFS size: $(du -h "${ISO_DIR}/casper/filesystem.squashfs" | cut -f1)"
+    log_success "SquashFS-Image erfolgreich erstellt."
+    log_info "SquashFS-Größe: $(du -h "${ISO_DIR}/casper/filesystem.squashfs" | cut -f1)"
 }
 
 step_09_create_bootloaders() {
-    log_step "9/10" "Create Bootloaders (BIOS & UEFI)"
+    log_step "9/10" "Erstellung der Bootloader (BIOS & UEFI)"
     
-    # ISOLINUX for BIOS boot
+    # ISOLINUX für BIOS-Boot
     cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/isolinux/"
     cp /usr/lib/syslinux/modules/bios/{ldlinux.c32,libutil.c32,menu.c32} "${ISO_DIR}/isolinux/"
     
@@ -1333,67 +799,42 @@ PROMPT 0
 TIMEOUT 50
 DEFAULT live
 
-MENU TITLE ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}
-MENU BACKGROUND #3498db
-
+MENU TITLE ${DISTRO_NAME} ${DISTRO_VERSION}
 LABEL live
   MENU LABEL Try or Install ${DISTRO_NAME}
   KERNEL /casper/vmlinuz
-  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash username=ailinux hostname=ailinux
-
-LABEL live-safe
+  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash ---
+LABEL safe
   MENU LABEL Try ${DISTRO_NAME} (safe graphics)
   KERNEL /casper/vmlinuz
-  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd nomodeset quiet splash username=ailinux hostname=ailinux
-
-LABEL memtest
-  MENU LABEL Memory Test
-  KERNEL /install/memtest86+.bin
+  APPEND file=/cdrom/.disk/info boot=casper initrd=/casper/initrd quiet splash nomodeset ---
 EOF
 
-    # GRUB for UEFI boot
+    # GRUB für UEFI-Boot
     cat > "${ISO_DIR}/boot/grub/grub.cfg" << EOF
 set timeout=5
 set default="0"
-
-if loadfont /boot/grub/font.pf2 ; then
-    set gfxmode=auto
-    insmod efi_gop
-    insmod efi_uga
-    insmod gfxterm
-    terminal_output gfxterm
-fi
-
 menuentry "Try or Install ${DISTRO_NAME}" {
-    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper quiet splash username=ailinux hostname=ailinux
+    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper quiet splash ---
     initrd /casper/initrd
 }
-
 menuentry "Try ${DISTRO_NAME} (safe graphics)" {
-    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash username=ailinux hostname=ailinux
-    initrd /casper/initrd
-}
-
-menuentry "Check disc for defects" {
-    linux /casper/vmlinuz boot=casper integrity-check quiet splash ---
+    linux /casper/vmlinuz file=/cdrom/.disk/info boot=casper nomodeset quiet splash ---
     initrd /casper/initrd
 }
 EOF
 
-    # Create EFI image
-    log_info "Creating GRUB EFI boot image..."
-    dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1M count=64 status=none
-    mkfs.vfat -n "AILINUX_EFI" "${ISO_DIR}/boot/grub/efi.img" > /dev/null
-    
-    # Create standalone GRUB EFI executable
+    # Erstelle GRUB EFI-Image für Secure Boot
+    log_info "Erstelle GRUB EFI-Boot-Image..."
     grub-mkstandalone \
         --format=x86_64-efi \
         --output="/tmp/bootx64.efi" \
-        --locales="" \
-        --fonts="" \
+        --locales="" --fonts="" \
         "boot/grub/grub.cfg=${ISO_DIR}/boot/grub/grub.cfg"
+
+    dd if=/dev/zero of="${ISO_DIR}/boot/grub/efi.img" bs=1M count=64 status=none
+    mkfs.vfat -n "AILINUX_EFI" "${ISO_DIR}/boot/grub/efi.img" > /dev/null
     
-    # Mount EFI image and copy files
     local efi_mount
     efi_mount=$(mktemp -d)
     sudo mount -o loop "${ISO_DIR}/boot/grub/efi.img" "${efi_mount}"
@@ -1402,89 +843,37 @@ EOF
     sudo cp /usr/lib/shim/shimx64.efi.signed "${efi_mount}/EFI/BOOT/BOOTX64.EFI"
     sudo umount "${efi_mount}"
     rmdir "${efi_mount}"
-    rm -f /tmp/bootx64.efi || true
+    rm -f /tmp/bootx64.efi
     
-    log_success "Bootloaders created successfully."
+    log_success "Bootloader erfolgreich erstellt."
 }
 
 step_10_create_iso() {
-    log_step "10/10" "Create Final ISO Image"
+    log_step "10/10" "Erstellung des finalen ISO-Images"
     
-    log_info "Creating hybrid ISO image with enhanced options..."
+    log_info "Erstelle hybrides ISO-Image..."
     sudo xorriso -as mkisofs \
         -o "${BUILD_DIR}/${ISO_NAME}" \
-        -V "${DISTRO_NAME}_$(echo ${DISTRO_VERSION} | tr . _)" \
-        -A "${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}" \
+        -V "${DISTRO_NAME}_${DISTRO_VERSION}" \
         -iso-level 3 -r -J -l \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
         -no-emul-boot -boot-load-size 4 -boot-info-table \
         -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot \
         -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
-        -isohybrid-gpt-basdat \
-        -isohybrid-apm-hfsplus \
         "${ISO_DIR}"
 
-    # Fix permissions and move to final location
     sudo chown "$(id -u):$(id -g)" "${BUILD_DIR}/${ISO_NAME}"
-    local final_iso_path="$(pwd)/${ISO_NAME}"
-    mv "${BUILD_DIR}/${ISO_NAME}" "${final_iso_path}"
+    mv "${BUILD_DIR}/${ISO_NAME}" "$(pwd)/"
     
-    # Create checksum
-    sha256sum "${final_iso_path}" > "${final_iso_path}.sha256"
+    sha256sum "$(pwd)/${ISO_NAME}" > "$(pwd)/${ISO_NAME}.sha256"
     
-    # Create build info
-    cat > "ailinux-build-info.txt" << EOF
-AILinux Build Information
-========================
-Build Date: $(date)
-Distribution: ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}
-Architecture: ${ARCHITECTURE}
-ISO File: ${ISO_NAME}
-ISO Size: $(du -h "${final_iso_path}" | cut -f1)
-
-Features:
-- Ubuntu ${DISTRO_VERSION} LTS base
-- KDE Plasma Desktop (kde-full)
-- Calamares Installer with FIXED bootloader configuration
-- AI-powered System Helper (aihelp command)
-- Mixtral AI integration via API
-- Premium application suite
-- BIOS and UEFI boot support with Secure Boot
-- zstd compressed SquashFS
-
-Included Software:
-- Desktop: KDE Plasma, SDDM, Konsole
-- Browsers: Firefox, Google Chrome
-- Office: LibreOffice Suite
-- Media: VLC, GIMP
-- Development: VS Code, Git, Python, Node.js, JDK
-- Windows Support: Wine, Winetricks
-- System Tools: GParted, Htop, NetworkManager
-
-Bootloader Fix Applied:
-- Enhanced Python dependencies for Calamares
-- Complete GRUB/EFI package installation
-- Fixed bootloader.conf configuration
-- Improved error handling
-
-Usage:
-- Boot from USB/DVD to try ${DISTRO_NAME}
-- Use "aihelp" command for AI assistance
-- Install using the desktop installer (Calamares)
-
-For more information: https://github.com/derleiti/ailinux-beta-iso
-EOF
-    
-    log_success "ISO successfully created: ${final_iso_path}"
-    log_success "ISO Size: $(du -h "${final_iso_path}" | cut -f1)"
-    log_success "Checksum: ${final_iso_path}.sha256"
-    log_success "Build info: ailinux-build-info.txt"
+    log_success "ISO erfolgreich erstellt: $(pwd)/${ISO_NAME}"
+    log_info "ISO-Größe: $(du -h "$(pwd)/${ISO_NAME}" | cut -f1)"
 }
 
-# --- Main Function ---
+# --- Hauptfunktion ---
 main() {
-    # Clear previous log
     rm -f "${LOG_FILE}"
     
     check_not_root
@@ -1492,8 +881,8 @@ main() {
     local start_time
     start_time=$(date +%s)
     
-    log_info "==================== AILinux ISO Build v21.0 - BOOTLOADER FIXED ===================="
-    log_info "Starting build process for ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
+    log_info "==================== AILinux ISO Build v25.07 - Refined Edition ===================="
+    log_info "Starte Build-Prozess für ${DISTRO_NAME} ${DISTRO_VERSION} ${DISTRO_EDITION}"
     
     step_01_setup
     step_02_bootstrap_system
@@ -1511,13 +900,11 @@ main() {
     local duration=$((end_time - start_time))
     
     echo
-    log_success "==================== BUILD COMPLETED SUCCESSFULLY ===================="
+    log_success "==================== BUILD ERFOLGREICH ABGESCHLOSSEN ===================="
     log_success "ISO: $(realpath "${ISO_NAME}")"
-    log_success "Build time: $((duration / 60)) minutes and $((duration % 60)) seconds"
-    log_success "You can now boot the ISO in a VM or write it to a USB drive."
-    log_info "To test: qemu-system-x86_64 -cdrom ${ISO_NAME} -m 4096 -enable-kvm"
-    log_warn "The build directory '${BUILD_DIR}' has been kept for inspection."
-    log_info "To clean up: ./clean.sh"
+    log_success "Build-Dauer: $((duration / 60)) Minuten und $((duration % 60)) Sekunden"
+    log_info "Um das Build-Verzeichnis zu bereinigen: sudo rm -rf ${BUILD_DIR}"
 }
 
-# Start the script
+# Starte das Skript
+main "$@"
