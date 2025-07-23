@@ -1,33 +1,58 @@
-AILinux Build Information
-========================
-Build Date: Mi 23. Jul 09:29:57 CEST 2025
-Distribution: AILinux 24.04 Premium
-Architecture: amd64
-ISO File: ailinux-24.04-premium-amd64.iso
-ISO Size: 5,3G
+# AILinux 24.04 Premium - Build Information
+# Generated: Mi 23. Jul 15:54:50 CEST 2025
+# Build Script Version: v25.08-CORRECTED
 
-Features:
-- Ubuntu 24.04 LTS base
-- KDE Plasma Desktop (kde-full)
-- Calamares Installer with custom branding
-- AI-powered System Helper (aihelp command)
-- Mixtral AI integration via API
-- Premium application suite
-- BIOS and UEFI boot support with Secure Boot
-- zstd compressed SquashFS
+## System Details
+- Distribution: AILinux 24.04 Premium
+- Base: Ubuntu 24.04 (Noble Numbat)
+- Architecture: amd64
+- Kernel: 6.15.5-061505-generic
 
-Included Software:
-- Desktop: KDE Plasma, SDDM, Konsole
-- Browsers: Firefox, Google Chrome
-- Office: LibreOffice Suite
-- Media: VLC, GIMP
-- Development: VS Code, Git, Python, Node.js, JDK
-- Windows Support: Wine, Winetricks
-- System Tools: GParted, Htop, NetworkManager
+## Desktop Environment  
+- KDE Plasma Desktop (kde-full) ✅ CORRECTED
+- SDDM Display Manager with Auto-login
+- Breeze Theme
 
-Usage:
-- Boot from USB/DVD to try AILinux
-- Use "aihelp" command for AI assistance
-- Install using the desktop installer (Calamares)
+## Key Features
+- ✅ Calamares Installer with FIXED branding configuration  
+- ✅ aihelp - AI-powered system assistant
+- ✅ Secure Boot support (UEFI + BIOS)
+- ✅ AILinux Mirror integration
+- ✅ zstd-compressed SquashFS
 
-For more information: https://github.com/derleiti/ailinux-beta-iso
+## Pre-installed Software
+7zip	23.01+dfsg-11
+accounts-qml6-module-doc	0.7+p24.04+vrelease+git20240817.0429-0
+accountsservice	23.13.9-2ubuntu6
+accountwizard	4:25.04.3-0zneon+24.04+noble+release+build27
+acl	2.3.2-1build1.1
+adduser	3.137ubuntu1
+advancecomp	2.5-1build1
+adwaita-icon-theme	46.0-1
+ailinux-app	1.1.0
+akonadiconsole	4:25.04.3-0zneon+24.04+noble+release+build29
+akregator	4:25.04.3-0zneon+24.04+noble+release+build31
+amd64-microcode	3.20250311.1ubuntu0.24.04.1
+analitza-common	4:25.04.3-0zneon+24.04+noble+release+build19
+apparmor	4.0.1really4.0.1-0ubuntu0.24.04.4
+appmenu-gtk-module-common	0.7.6-2.1ubuntu2
+appmenu-gtk2-module	0.7.6-2.1ubuntu2
+appmenu-gtk3-module	0.7.6-2.1ubuntu2
+appstream	1.0.4-1+24.04+noble+release+build2
+apt	2.8.3
+apt-config-icons	1.0.4-1+24.04+noble+release+build2
+Package list generation failed
+
+## Build Fixes Applied
+1. ✅ KDE kde-full installation corrected - now properly installs
+2. ✅ Calamares branding.desc extended with slideshow configuration  
+3. ✅ Desktop installer icon functionality ensured
+4. ✅ Package installation error handling improved
+
+## Files Generated
+- ISO: ailinux-24.04-premium-amd64.iso
+- Checksum: ailinux-24.04-premium-amd64.iso.sha256
+- Build Log: build.log
+
+## Usage
+Test with: qemu-system-x86_64 -cdrom ailinux-24.04-premium-amd64.iso -m 4096 -enable-kvm

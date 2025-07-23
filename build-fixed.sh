@@ -270,7 +270,8 @@ step_03_install_packages() {
     # FIX: KDE Installation in zwei Schritten für bessere Kompatibilität
     local KDE_BASE_PKGS=(
         plasma-desktop kde-plasma-desktop plasma-workspace
-        sddm sddm-theme-breeze plasma-nm discover-backend-flatpak
+        sddm sddm-theme-breeze plasma-nm plasma-discover
+        plasma-discover-backend-flatpak plasma-discover-backend-snap
         xorg xserver-xorg-video-all
     )
     
@@ -572,7 +573,7 @@ prompt-install: false
 quit-at-end: false
 SETTINGS
 
-# FIX: Erweiterte Branding-Konfiguration mit Slideshow
+# FIX: Erweiterte Branding-Konfiguration mit korrigierter YAML-Syntax
 cat > /etc/calamares/branding/ailinux/branding.desc << '"'BRANDING'"'
 ---
 componentName: ailinux
@@ -602,13 +603,12 @@ images:
 
 slideshow:
     api: 2
-    
+
 slideshowAPI: 2
 
-# FIX: Slideshow-Konfiguration hinzugefügt
 show:
     - welcome
-    - locale  
+    - locale
     - keyboard
     - partition
     - users
