@@ -289,7 +289,7 @@ apt-get install -y \
     kde-full plasma-desktop sddm-theme-breeze \
     xorg xinit x11-xserver-utils xserver-xorg-video-all
 
-# Install core applications
+# Install core applications and AILinux App dependencies
 apt-get install -y \
     firefox thunderbird vlc gimp \
     libreoffice libreoffice-l10n-en-us \
@@ -299,6 +299,7 @@ apt-get install -y \
     pulseaudio pulseaudio-utils pavucontrol \
     git build-essential cmake \
     python3 python3-pip python3-venv python3-dev \
+    python3-pyqt5 python3-pyqt5.qtwidgets python3-pyqt5.qtcore python3-pyqt5.qtgui \
     nodejs npm default-jdk \
     linux-firmware bluez bluetooth \
     wpasupplicant printer-driver-all cups \
@@ -515,14 +516,289 @@ if __name__ == '__main__':
 AIHELPER
 chmod +x /opt/ailinux/ailinux-helper.py
 
-# Create symlink for easy access
+# Create the AILinux GUI Application
+cat > /opt/ailinux/ailinux-app.py << 'AILINUX_APP'
+#!/usr/bin/env python3
+"""
+AILinux App - GUI für den AI-gestützten Linux-Assistenten
+Eine benutzerfreundliche grafische Oberfläche für AILinux Helper
+"""
+
+import sys
+import os
+import subprocess
+import threading
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
+                             QWidget, QTextEdit, QLineEdit, QPushButton, QLabel, 
+                             QTabWidget, QScrollArea, QFrame, QSplitter, QSystemTrayIcon, QMenu, QAction)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QFont, QPalette, QColor, QIcon, QPixmap
+
+# Import the AI helper
+sys.path.append('/opt/ailinux')
+try:
+    from ailinux_helper import AILinuxHelper
+except ImportError:
+    AILinuxHelper = None
+
+class AIWorkerThread(QThread):
+    response_ready = pyqtSignal(str)
+    
+    def __init__(self, query):
+        super().__init__()
+        self.query = query
+        
+    def run(self):
+        if AILinuxHelper:
+            try:
+                helper = AILinuxHelper()
+                response = helper.analyze_problem(self.query)
+                self.response_ready.emit(response)
+            except Exception as e:
+                self.response_ready.emit(f"Fehler bei der AI-Analyse: {str(e)}")
+        else:
+            self.response_ready.emit("AI Helper nicht verfügbar. Bitte konfigurieren Sie den API-Schlüssel.")
+
+class SystemInfoWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.update_info)
+        self.update_timer.start(5000)  # Update every 5 seconds
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        self.info_text = QTextEdit()
+        self.info_text.setReadOnly(True)
+        self.info_text.setFont(QFont("Courier", 10))
+        
+        refresh_btn = QPushButton("🔄 Aktualisieren")
+        refresh_btn.clicked.connect(self.update_info)
+        
+        layout.addWidget(QLabel("🖥️ System-Informationen"))
+        layout.addWidget(self.info_text)
+        layout.addWidget(refresh_btn)
+        
+        self.setLayout(layout)
+        self.update_info()
+        
+    def update_info(self):
+        try:
+            if AILinuxHelper:
+                helper = AILinuxHelper()
+                info = helper.get_system_info()
+                self.info_text.setPlainText(info)
+            else:
+                self.info_text.setPlainText("System-Info nicht verfügbar")
+        except:
+            self.info_text.setPlainText("Fehler beim Laden der System-Informationen")
+
+class AILinuxMainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.setup_tray()
+        
+    def init_ui(self):
+        self.setWindowTitle("AILinux Assistant")
+        self.setGeometry(100, 100, 1000, 700)
+        
+        # Dark theme
+        self.setStyleSheet("""
+            QMainWindow { background-color: #2b2b2b; color: #ffffff; }
+            QTextEdit { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555; }
+            QLineEdit { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555; padding: 5px; }
+            QPushButton { background-color: #4CAF50; color: white; border: none; padding: 8px; border-radius: 4px; }
+            QPushButton:hover { background-color: #45a049; }
+            QLabel { color: #ffffff; }
+            QTabWidget::pane { border: 1px solid #555; background-color: #2b2b2b; }
+            QTabBar::tab { background-color: #3c3c3c; color: #ffffff; padding: 8px; }
+            QTabBar::tab:selected { background-color: #4CAF50; }
+        """)
+        
+        # Central widget with tabs
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
+        
+        # Header
+        header = QLabel("🧠 AILinux Assistant - KI-gestützter System-Support")
+        header.setFont(QFont("Arial", 16, QFont.Bold))
+        header.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header)
+        
+        # Tab widget
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+        
+        # AI Chat Tab
+        self.create_ai_chat_tab()
+        
+        # System Info Tab
+        self.create_system_info_tab()
+        
+        # Quick Actions Tab
+        self.create_quick_actions_tab()
+        
+    def create_ai_chat_tab(self):
+        ai_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Chat area
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        self.chat_area.append("🤖 AILinux Assistant bereit! Beschreiben Sie Ihr Problem...")
+        
+        # Input area
+        input_layout = QHBoxLayout()
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("Beschreiben Sie Ihr Problem hier...")
+        self.input_field.returnPressed.connect(self.send_query)
+        
+        send_btn = QPushButton("📤 Senden")
+        send_btn.clicked.connect(self.send_query)
+        
+        clear_btn = QPushButton("🗑️ Löschen")
+        clear_btn.clicked.connect(self.clear_chat)
+        
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(send_btn)
+        input_layout.addWidget(clear_btn)
+        
+        layout.addWidget(self.chat_area)
+        layout.addLayout(input_layout)
+        
+        ai_widget.setLayout(layout)
+        self.tabs.addTab(ai_widget, "🤖 AI-Chat")
+        
+    def create_system_info_tab(self):
+        self.system_info_widget = SystemInfoWidget()
+        self.tabs.addTab(self.system_info_widget, "🖥️ System-Info")
+        
+    def create_quick_actions_tab(self):
+        actions_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        layout.addWidget(QLabel("⚡ Schnell-Aktionen"))
+        
+        # Quick action buttons
+        actions = [
+            ("🔧 System-Update durchführen", "sudo apt update && sudo apt upgrade"),
+            ("🧹 System aufräumen", "sudo apt autoremove && sudo apt autoclean"),
+            ("📊 Festplatten-Info anzeigen", "df -h"),
+            ("🔍 Große Dateien finden", "sudo du -h / | sort -hr | head -20"),
+            ("🌐 Netzwerk-Status prüfen", "ip addr show && ping -c 3 google.com"),
+            ("🔒 Firewall-Status prüfen", "sudo ufw status"),
+        ]
+        
+        for name, command in actions:
+            btn = QPushButton(name)
+            btn.clicked.connect(lambda checked, cmd=command: self.run_command(cmd))
+            layout.addWidget(btn)
+            
+        actions_widget.setLayout(layout)
+        self.tabs.addTab(actions_widget, "⚡ Aktionen")
+        
+    def setup_tray(self):
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon = QSystemTrayIcon(self)
+            
+            # Create tray menu
+            tray_menu = QMenu()
+            
+            show_action = QAction("AILinux App anzeigen", self)
+            show_action.triggered.connect(self.show)
+            tray_menu.addAction(show_action)
+            
+            quit_action = QAction("Beenden", self)
+            quit_action.triggered.connect(QApplication.quit)
+            tray_menu.addAction(quit_action)
+            
+            self.tray_icon.setContextMenu(tray_menu)
+            self.tray_icon.show()
+            
+    def send_query(self):
+        query = self.input_field.text().strip()
+        if not query:
+            return
+            
+        self.chat_area.append(f"\n👤 Benutzer: {query}")
+        self.input_field.clear()
+        
+        self.chat_area.append("🤖 Analysiere...")
+        
+        # Start AI worker thread
+        self.worker = AIWorkerThread(query)
+        self.worker.response_ready.connect(self.handle_ai_response)
+        self.worker.start()
+        
+    def handle_ai_response(self, response):
+        self.chat_area.append(f"\n🤖 AILinux Assistant:\n{response}")
+        self.chat_area.verticalScrollBar().setValue(
+            self.chat_area.verticalScrollBar().maximum()
+        )
+        
+    def clear_chat(self):
+        self.chat_area.clear()
+        self.chat_area.append("🤖 AILinux Assistant bereit! Beschreiben Sie Ihr Problem...")
+        
+    def run_command(self, command):
+        self.chat_area.append(f"\n⚡ Führe aus: {command}")
+        try:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
+            output = result.stdout if result.stdout else result.stderr
+            self.chat_area.append(f"📝 Ausgabe:\n{output}")
+        except subprocess.TimeoutExpired:
+            self.chat_area.append("⏰ Befehl-Timeout")
+        except Exception as e:
+            self.chat_area.append(f"❌ Fehler: {str(e)}")
+
+def main():
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)  # Keep running in tray
+    
+    window = AILinuxMainWindow()
+    window.show()
+    
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
+AILINUX_APP
+chmod +x /opt/ailinux/ailinux-app.py
+
+# Create desktop entry for AILinux App
+cat > /usr/share/applications/ailinux-app.desktop << 'DESKTOP_ENTRY'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AILinux App
+Name[de]=AILinux Anwendung
+Comment=AI-powered system assistant GUI
+Comment[de]=KI-gestützter System-Assistent mit GUI
+Icon=ailinux-app
+Exec=/opt/ailinux/ailinux-app.py
+Terminal=false
+StartupNotify=true
+Categories=System;Utility;
+Keywords=AI;assistant;system;helper;
+DESKTOP_ENTRY
+
+# Create symlink for easy command line access
 ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
+ln -sf /opt/ailinux/ailinux-app.py /usr/local/bin/ailinux-app
 
 # Move .env file to final location
 if [ -f '/tmp/.env' ]; then
     mv /tmp/.env /opt/ailinux/.env
     chmod 600 /opt/ailinux/.env
 fi
+
+echo "AILinux AI components and GUI app installed successfully."
 AI_EOF
 
     sudo cp /tmp/install_ai.sh "${CHROOT_DIR}/tmp/"
@@ -923,7 +1199,135 @@ basicSetup: false
 sysconfigSetup: false
 DISPLAYMGR
 
+# Partition module configuration - WITH automatic EFI partition
+cat > /etc/calamares/modules/partition.conf << 'PARTITION'
+---
+efiSystemPartition: "/boot/efi"
+efiSystemPartitionSize: 1000MiB
+efiSystemPartitionName: "EFI"
+
+userSwapChoices:
+    - none
+    - small
+    - suspend
+
+swapPartitionName: "swap"
+
+drawNestedPartitions: false
+
+alwaysShowPartitionLabels: true
+
+allowManualPartitioning: true
+
+initialPartitioningChoice: erase
+initialSwapChoice: small
+
+defaultFileSystemType: "ext4"
+
+availableFileSystemTypes:
+    - "ext4"
+    - "ext3"
+    - "ext2"
+    - "btrfs"
+    - "xfs"
+
+partitionLayout:
+    - name: "efi"
+      type: "efi"
+      size: 1000MiB
+      mountPoint: "/boot/efi"
+      filesystem: "fat32"
+      attributes: 64
+    - name: "root"
+      type: "primary"
+      size: 100%
+      mountPoint: "/"
+      filesystem: "ext4"
+
+requiredPartitionTableType:
+    - "gpt"
+
+armInstall: false
+PARTITION
+
 # Bootloader configuration - SIMPLIFIED and WORKING
+cat > /etc/calamares/modules/bootloader.conf << 'BOOTLOADER'
+---
+efiBootloaderId: "ailinux"
+
+kernel: "/vmlinuz"
+img: "/initrd.img"
+
+grubInstall: "grub-install"
+grubMkconfig: "grub-mkconfig"
+grubCfg: "/boot/grub/grub.cfg"
+efiBootMgr: "efibootmgr"
+
+installEFIFallback: true
+timeout: 10
+
+efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --removable"
+biosInstallParams: "--target=i386-pc"
+BOOTLOADER
+
+# Mount module configuration - to properly handle EFI partition
+cat > /etc/calamares/modules/mount.conf << 'MOUNT'
+---
+extraMounts:
+    - device: proc
+      fs: proc
+      mountPoint: /proc
+    - device: sys  
+      fs: sysfs
+      mountPoint: /sys
+    - device: /dev
+      mountPoint: /dev
+      options: bind
+    - device: tmpfs
+      fs: tmpfs
+      mountPoint: /run
+    - device: /dev/pts
+      fs: devpts
+      mountPoint: /dev/pts
+      options: "gid=5,mode=620"
+
+extraMountsEfi:
+    - device: efivarfs
+      fs: efivarfs
+      mountPoint: /sys/firmware/efi/efivars
+MOUNT
+
+# Fstab module configuration - to ensure proper fstab generation
+cat > /etc/calamares/modules/fstab.conf << 'FSTAB'
+---
+mountOptions:
+    default:
+        - defaults
+        - noatime
+    efi:
+        - defaults
+        - umask=077
+    btrfs:
+        - defaults
+        - noatime
+        - space_cache
+        - autodefrag
+
+ssdExtraMountOptions:
+    ext4:
+        - discard
+    jfs:
+        - discard
+    xfs:
+        - discard
+
+efiMountOptions:
+    - defaults
+    - umask=077
+
+crypttabOptions:
+    - luks
+FSTAB
 cat > /etc/calamares/modules/bootloader.conf << 'BOOTLOADER'
 ---
 efiBootloaderId: "ailinux"
@@ -1006,8 +1410,8 @@ cat > '/home/ailinux/Desktop/aihelp.desktop' << 'AIHELP_EOF'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=AILinux Helper
-Name[de]=AILinux Assistent
+Name=AILinux Helper (Terminal)
+Name[de]=AILinux Assistent (Terminal)
 Comment=AI-powered system assistant
 Comment[de]=KI-gestützter Systemassistent
 Icon=dialog-information
@@ -1018,6 +1422,23 @@ Categories=System;Utility;
 AIHELP_EOF
 chmod +x '/home/ailinux/Desktop/aihelp.desktop'
 
+# Create AILinux App shortcut
+cat > '/home/ailinux/Desktop/ailinux-app.desktop' << 'APP_EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AILinux App
+Name[de]=AILinux Anwendung  
+Comment=AI-powered system assistant GUI
+Comment[de]=KI-gestützter System-Assistent mit GUI
+Icon=applications-system
+Exec=/opt/ailinux/ailinux-app.py
+Terminal=false
+StartupNotify=true
+Categories=System;Utility;
+APP_EOF
+chmod +x '/home/ailinux/Desktop/ailinux-app.desktop'
+
 # Configure .bashrc
 cat >> '/home/ailinux/.bashrc' << 'BASHRC_EOF'
 
@@ -1025,11 +1446,29 @@ cat >> '/home/ailinux/.bashrc' << 'BASHRC_EOF'
 echo ''
 echo '🧠 Willkommen bei AILinux 24.04 Premium!'
 echo 'Verwenden Sie "aihelp" für KI-gestützte Systemhilfe.'
+echo 'Oder starten Sie "ailinux-app" für die grafische Oberfläche.'
 echo ''
+
+# AILinux App alias
+alias aiapp='ailinux-app'
+alias ai='aihelp'
 BASHRC_EOF
 
 # Set ownership
 chown -R 'ailinux:ailinux' '/home/ailinux'
+
+# Create autostart entry for AILinux App (optional)
+mkdir -p '/home/ailinux/.config/autostart'
+cat > '/home/ailinux/.config/autostart/ailinux-app.desktop' << 'AUTOSTART_EOF'
+[Desktop Entry]
+Type=Application
+Name=AILinux App
+Exec=/opt/ailinux/ailinux-app.py
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+AUTOSTART_EOF
+chown 'ailinux:ailinux' '/home/ailinux/.config/autostart/ailinux-app.desktop'
 USER_EOF
 
     sudo cp /tmp/create_user.sh "${CHROOT_DIR}/tmp/"
