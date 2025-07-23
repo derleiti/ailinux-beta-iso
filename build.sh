@@ -388,7 +388,7 @@ PACKAGES_EOF
 }
 
 step_04_install_ai_components() {
-    log_step "4/10" "Install AILinux AI Components and Create APT Package"
+    log_step "4/10" "Install AILinux AI Components from Repository"
     
     # Copy .env file to chroot if it exists
     if [ -f ".env" ]; then
@@ -400,17 +400,27 @@ step_04_install_ai_components() {
 #!/bin/bash
 set -e
 
-# Install required packages for AI components and package building
-apt-get install -y python3-pip python3-venv python3-dev
+# Install Python dependencies
 python3 -m pip install --break-system-packages requests python-dotenv psutil
 
-# Install package building tools
-apt-get install -y dpkg-dev build-essential devscripts debhelper
-
+# Create base directory for AILinux components
 mkdir -p /opt/ailinux
 
-# Create the AI helper script
-cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
+# Install AILinux App from repository (if available)
+echo "Installing AILinux App from repository..."
+if apt-get install -y ailinux-app; then
+    echo "AILinux App successfully installed from repository!"
+    # Copy .env to the installed location if it exists
+    if [ -f '/tmp/.env' ]; then
+        cp /tmp/.env /opt/ailinux/.env
+        chmod 600 /opt/ailinux/.env
+        echo "API configuration copied to installed package."
+    fi
+else
+    echo "AILinux App not available in repository, creating basic AI helper..."
+    
+    # Fallback: Create basic AI helper if package not available
+    cat > /opt/ailinux/ailinux-helper.py << 'AIHELPER'
 #!/usr/bin/env python3
 import os
 import sys
@@ -435,14 +445,13 @@ class AILinuxHelper:
         self.system_prompt = '''Du bist AILinux Helper – ein KI-gesteuerter Assistent, der in der Linux-Distribution „AILinux 24.04 Premium" eingebettet ist.
 
 Diese Distribution basiert auf Ubuntu 24.04 (Codename: Noble) und wurde speziell für eine moderne, KI-integrierte Offline-Nutzung entwickelt.
-Dein Interface ist das Kommandozeilentool aihelp.
 
 ## 🎯 Deine Aufgabe
 
 Du wirst direkt über das Terminal vom Nutzer aufgerufen, um:
 
 - Fehlermeldungen und Logs zu analysieren
-- technische Probleme zu erklären
+- technische Probleme zu erklären  
 - Lösungen bereitzustellen, z. B. Shell-Befehle oder Systemhinweise
 - Hilfe zur Nutzung und Konfiguration von AILinux zu leisten
 
@@ -535,478 +544,51 @@ def main():
 if __name__ == '__main__':
     main()
 AIHELPER
-chmod +x /opt/ailinux/ailinux-helper.py
-
-# Create symlink for easy access
-ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
-
-# Move .env file to final location
-if [ -f '/tmp/.env' ]; then
-    mv /tmp/.env /opt/ailinux/.env
-    chmod 600 /opt/ailinux/.env
-fi
-
-echo "=== Creating AILinux App Debian Package ==="
-
-# Create package build directory
-PKG_DIR="/tmp/ailinux-app-package"
-mkdir -p "$PKG_DIR"
-
-# Create package structure
-mkdir -p "$PKG_DIR"/{DEBIAN,opt/ailinux,usr/share/applications,usr/bin}
-
-# Copy AI helper to package
-cp /opt/ailinux/ailinux-helper.py "$PKG_DIR/opt/ailinux/"
-chmod +x "$PKG_DIR/opt/ailinux/ailinux-helper.py"
-
-# Create the comprehensive AILinux GUI/Terminal Application
-cat > "$PKG_DIR/opt/ailinux/ailinux-app.py" << 'AILINUX_APP'
-#!/usr/bin/env python3
-"""
-AILinux App - GUI für den AI-gestützten Linux-Assistenten
-Eine benutzerfreundliche grafische Oberfläche für AILinux Helper
-Mit automatischem Fallback auf Terminal-Modus wenn PyQt5 nicht verfügbar ist
-"""
-
-import sys
-import os
-import subprocess
-import threading
-
-# Try to import PyQt5, fallback to terminal mode if not available
-try:
-    from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                                 QWidget, QTextEdit, QLineEdit, QPushButton, QLabel, 
-                                 QTabWidget, QFrame, QSystemTrayIcon, QMenu, QAction)
-    from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-    from PyQt5.QtGui import QFont, QIcon
-    PYQT5_AVAILABLE = True
-except ImportError:
-    PYQT5_AVAILABLE = False
-
-# Import the AI helper
-sys.path.append('/opt/ailinux')
-try:
-    from ailinux_helper import AILinuxHelper
-except ImportError:
-    AILinuxHelper = None
-
-def terminal_mode():
-    """Terminal-based AILinux App when PyQt5 is not available"""
-    print("="*60)
-    print("🧠 AILinux Assistant - Terminal Mode")
-    print("="*60)
-    print()
+    chmod +x /opt/ailinux/ailinux-helper.py
     
-    if not AILinuxHelper:
-        print("❌ AI Helper nicht verfügbar. Bitte konfigurieren Sie den API-Schlüssel.")
-        print("Führen Sie aus: sudo dpkg-reconfigure ailinux-app")
-        return
-        
-    helper = AILinuxHelper()
-    
-    print("Verfügbare Befehle:")
-    print("  1. AI-Chat: Stellen Sie eine Frage zum System")
-    print("  2. System-Info: Zeige Systeminformationen")
-    print("  3. Quick-Actions: Führe häufige Befehle aus")
-    print("  4. Beenden")
-    print()
-    
-    while True:
-        try:
-            choice = input("Wählen Sie eine Option (1-4): ").strip()
-            
-            if choice == "1":
-                print("\n🤖 AI-Chat Modus (Ctrl+C zum Beenden)")
-                print("-" * 40)
-                while True:
-                    try:
-                        query = input("\n👤 Ihre Frage: ").strip()
-                        if not query:
-                            continue
-                        print("🤖 Analysiere...")
-                        response = helper.analyze_problem(query)
-                        print(f"\n🤖 AILinux Assistant:\n{response}")
-                    except KeyboardInterrupt:
-                        print("\n\nZurück zum Hauptmenü...")
-                        break
-                        
-            elif choice == "2":
-                print("\n🖥️ System-Informationen:")
-                print("-" * 30)
-                info = helper.get_system_info()
-                print(info)
-                input("\nDrücken Sie Enter zum Fortfahren...")
-                
-            elif choice == "3":
-                print("\n⚡ Quick Actions:")
-                print("-" * 20)
-                actions = [
-                    ("System-Update", "sudo apt update && sudo apt upgrade"),
-                    ("System-Cleanup", "sudo apt autoremove && sudo apt autoclean"),
-                    ("Disk Usage", "df -h"),
-                    ("Network Status", "ip addr show"),
-                    ("Firewall Status", "sudo ufw status"),
-                ]
-                
-                for i, (name, cmd) in enumerate(actions, 1):
-                    print(f"  {i}. {name}")
-                
-                try:
-                    action_choice = int(input("\nWählen Sie eine Aktion (1-{}): ".format(len(actions))))
-                    if 1 <= action_choice <= len(actions):
-                        name, cmd = actions[action_choice - 1]
-                        print(f"\n⚡ Führe aus: {cmd}")
-                        try:
-                            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-                            print(f"📝 Ausgabe:\n{result.stdout}")
-                            if result.stderr:
-                                print(f"⚠️ Errors:\n{result.stderr}")
-                        except subprocess.TimeoutExpired:
-                            print("⏰ Befehl-Timeout")
-                        except Exception as e:
-                            print(f"❌ Fehler: {e}")
-                        input("\nDrücken Sie Enter zum Fortfahren...")
-                except ValueError:
-                    print("Ungültige Eingabe.")
-                    
-            elif choice == "4":
-                print("Auf Wiedersehen! 👋")
-                break
-                
-            else:
-                print("Ungültige Auswahl. Bitte wählen Sie 1-4.")
-                
-        except KeyboardInterrupt:
-            print("\n\nAuf Wiedersehen! 👋")
-            break
-
-if not PYQT5_AVAILABLE:
-    if __name__ == '__main__':
-        terminal_mode()
-        sys.exit(0)
-
-# PyQt5 GUI Code (only if PyQt5 is available)
-class AIWorkerThread(QThread):
-    response_ready = pyqtSignal(str)
-    
-    def __init__(self, query):
-        super().__init__()
-        self.query = query
-        
-    def run(self):
-        if AILinuxHelper:
-            try:
-                helper = AILinuxHelper()
-                response = helper.analyze_problem(self.query)
-                self.response_ready.emit(response)
-            except Exception as e:
-                self.response_ready.emit(f"Fehler bei der AI-Analyse: {str(e)}")
-        else:
-            self.response_ready.emit("AI Helper nicht verfügbar. Führen Sie aus: sudo dpkg-reconfigure ailinux-app")
-
-class SystemInfoWidget(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
-        self.update_timer = QTimer()
-        self.update_timer.timeout.connect(self.update_info)
-        self.update_timer.start(5000)
-        
-    def init_ui(self):
-        layout = QVBoxLayout()
-        
-        self.info_text = QTextEdit()
-        self.info_text.setReadOnly(True)
-        self.info_text.setFont(QFont("Courier", 10))
-        
-        refresh_btn = QPushButton("🔄 Aktualisieren")
-        refresh_btn.clicked.connect(self.update_info)
-        
-        layout.addWidget(QLabel("🖥️ System-Informationen"))
-        layout.addWidget(self.info_text)
-        layout.addWidget(refresh_btn)
-        
-        self.setLayout(layout)
-        self.update_info()
-        
-    def update_info(self):
-        try:
-            if AILinuxHelper:
-                helper = AILinuxHelper()
-                info = helper.get_system_info()
-                self.info_text.setPlainText(info)
-            else:
-                self.info_text.setPlainText("System-Info nicht verfügbar")
-        except:
-            self.info_text.setPlainText("Fehler beim Laden der System-Informationen")
-
-class AILinuxMainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
-        
-    def init_ui(self):
-        self.setWindowTitle("AILinux Assistant")
-        self.setGeometry(100, 100, 1000, 700)
-        
-        # Modern dark theme
-        self.setStyleSheet("""
-            QMainWindow { background-color: #2b2b2b; color: #ffffff; }
-            QTextEdit { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555; padding: 5px; }
-            QLineEdit { background-color: #3c3c3c; color: #ffffff; border: 1px solid #555; padding: 8px; }
-            QPushButton { background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; }
-            QPushButton:hover { background-color: #45a049; }
-            QLabel { color: #ffffff; }
-            QTabWidget::pane { border: 1px solid #555; background-color: #2b2b2b; }
-            QTabBar::tab { background-color: #3c3c3c; color: #ffffff; padding: 8px 16px; margin: 1px; }
-            QTabBar::tab:selected { background-color: #4CAF50; }
-        """)
-        
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        layout = QVBoxLayout()
-        central_widget.setLayout(layout)
-        
-        # Header
-        header = QLabel("🧠 AILinux Assistant - KI-gestützter System-Support")
-        header.setFont(QFont("Arial", 18, QFont.Bold))
-        header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("padding: 15px; background-color: #1e1e1e; border-radius: 8px; margin-bottom: 10px;")
-        layout.addWidget(header)
-        
-        # Tab widget
-        self.tabs = QTabWidget()
-        layout.addWidget(self.tabs)
-        
-        self.create_ai_chat_tab()
-        self.create_system_info_tab()
-        self.create_quick_actions_tab()
-        
-    def create_ai_chat_tab(self):
-        ai_widget = QWidget()
-        layout = QVBoxLayout()
-        
-        self.chat_area = QTextEdit()
-        self.chat_area.setReadOnly(True)
-        self.chat_area.append("🤖 AILinux Assistant bereit! Beschreiben Sie Ihr Problem...")
-        
-        input_layout = QHBoxLayout()
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Beschreiben Sie Ihr Problem hier...")
-        self.input_field.returnPressed.connect(self.send_query)
-        
-        send_btn = QPushButton("📤 Senden")
-        send_btn.clicked.connect(self.send_query)
-        
-        clear_btn = QPushButton("🗑️ Löschen")
-        clear_btn.clicked.connect(self.clear_chat)
-        
-        input_layout.addWidget(self.input_field)
-        input_layout.addWidget(send_btn)
-        input_layout.addWidget(clear_btn)
-        
-        layout.addWidget(self.chat_area)
-        layout.addLayout(input_layout)
-        
-        ai_widget.setLayout(layout)
-        self.tabs.addTab(ai_widget, "🤖 AI-Chat")
-        
-    def create_system_info_tab(self):
-        self.system_info_widget = SystemInfoWidget()
-        self.tabs.addTab(self.system_info_widget, "🖥️ System-Info")
-        
-    def create_quick_actions_tab(self):
-        actions_widget = QWidget()
-        layout = QVBoxLayout()
-        
-        layout.addWidget(QLabel("⚡ Schnell-Aktionen"))
-        
-        actions = [
-            ("🔧 System-Update durchführen", "sudo apt update && sudo apt upgrade"),
-            ("🧹 System aufräumen", "sudo apt autoremove && sudo apt autoclean"),
-            ("📊 Festplatten-Info anzeigen", "df -h"),
-            ("🔍 Große Dateien finden", "sudo du -h / | sort -hr | head -20"),
-            ("🌐 Netzwerk-Status prüfen", "ip addr show"),
-            ("🔒 Firewall-Status prüfen", "sudo ufw status"),
-        ]
-        
-        for name, command in actions:
-            btn = QPushButton(name)
-            btn.clicked.connect(lambda checked, cmd=command: self.run_command(cmd))
-            layout.addWidget(btn)
-            
-        actions_widget.setLayout(layout)
-        self.tabs.addTab(actions_widget, "⚡ Aktionen")
-        
-    def send_query(self):
-        query = self.input_field.text().strip()
-        if not query:
-            return
-            
-        self.chat_area.append(f"\n👤 Benutzer: {query}")
-        self.input_field.clear()
-        self.chat_area.append("🤖 Analysiere...")
-        
-        self.worker = AIWorkerThread(query)
-        self.worker.response_ready.connect(self.handle_ai_response)
-        self.worker.start()
-        
-    def handle_ai_response(self, response):
-        self.chat_area.append(f"\n🤖 AILinux Assistant:\n{response}")
-        
-    def clear_chat(self):
-        self.chat_area.clear()
-        self.chat_area.append("🤖 AILinux Assistant bereit! Beschreiben Sie Ihr Problem...")
-        
-    def run_command(self, command):
-        self.chat_area.append(f"\n⚡ Führe aus: {command}")
-        try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30)
-            output = result.stdout if result.stdout else result.stderr
-            self.chat_area.append(f"📝 Ausgabe:\n{output}")
-        except Exception as e:
-            self.chat_area.append(f"❌ Fehler: {str(e)}")
-
-def main():
-    if not PYQT5_AVAILABLE:
-        terminal_mode()
-        return
-    
-    app = QApplication(sys.argv)
-    window = AILinuxMainWindow()
-    window.show()
-    sys.exit(app.exec_())
-
-if __name__ == '__main__':
-    main()
-AILINUX_APP
-chmod +x "$PKG_DIR/opt/ailinux/ailinux-app.py"
-
-# Create wrapper script
-cat > "$PKG_DIR/usr/bin/ailinux-app" << 'WRAPPER'
-#!/bin/bash
-# AILinux App Wrapper Script
-export PYTHONPATH="/opt/ailinux:$PYTHONPATH"
-python3 /opt/ailinux/ailinux-app.py "$@"
-WRAPPER
-chmod +x "$PKG_DIR/usr/bin/ailinux-app"
-
-# Create aihelp wrapper
-cat > "$PKG_DIR/usr/bin/aihelp" << 'HELPER_WRAPPER'
-#!/bin/bash
-# AILinux Helper Wrapper Script
-export PYTHONPATH="/opt/ailinux:$PYTHONPATH"
-python3 /opt/ailinux/ailinux-helper.py "$@"
-HELPER_WRAPPER
-chmod +x "$PKG_DIR/usr/bin/aihelp"
-
-# Create desktop entry
-cat > "$PKG_DIR/usr/share/applications/ailinux-app.desktop" << 'DESKTOP'
+    # Create basic desktop entry for fallback
+    cat > /usr/share/applications/ailinux-helper.desktop << 'DESKTOP_FALLBACK'
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=AILinux App
-Name[de]=AILinux Anwendung
-Comment=AI-powered system assistant with GUI/Terminal support
-Comment[de]=KI-gestützter System-Assistent mit GUI/Terminal-Unterstützung
+Name=AILinux Helper
+Name[de]=AILinux Assistent
+Comment=AI-powered system assistant (fallback)
+Comment[de]=KI-gestützter Systemassistent (Fallback)
 Icon=applications-system
-Exec=ailinux-app
-Terminal=false
+Exec=konsole -e /opt/ailinux/ailinux-helper.py
+Terminal=true
 StartupNotify=true
 Categories=System;Utility;
 Keywords=AI;assistant;system;helper;
-DESKTOP
-
-# Create package control file
-cat > "$PKG_DIR/DEBIAN/control" << 'CONTROL'
-Package: ailinux-app
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: all
-Depends: python3 (>= 3.8), python3-pip, python3-requests, python3-dotenv, python3-psutil
-Recommends: python3-pyqt5
-Maintainer: AILinux Project <contact@ailinux.me>
-Description: AI-powered system assistant for AILinux
- AILinux App provides an intelligent system assistant that can help with
- troubleshooting, system analysis, and routine maintenance tasks.
- .
- Features:
-  - AI-powered problem analysis using Mixtral API
-  - GUI interface (when PyQt5 available) with fallback to terminal mode
-  - System monitoring and quick actions
-  - Integration with system logs and diagnostics
-Homepage: https://github.com/derleiti/ailinux-beta-iso
-CONTROL
-
-# Create postinst script
-cat > "$PKG_DIR/DEBIAN/postinst" << 'POSTINST'
-#!/bin/bash
-set -e
-
-# Install Python dependencies if not already installed
-python3 -m pip install --break-system-packages requests python-dotenv psutil 2>/dev/null || true
-
-# Create .env template if it doesn't exist
-if [ ! -f /opt/ailinux/.env ]; then
-    cat > /opt/ailinux/.env << 'ENV'
-# AILinux App Configuration
-# Add your Mixtral API key here:
-MISTRALAPIKEY=your_mixtral_api_key_here
-ENV
-    chmod 600 /opt/ailinux/.env
-    echo "Created /opt/ailinux/.env - Please add your Mixtral API key"
+DESKTOP_FALLBACK
+    
+    # Create basic symlink
+    ln -sf /opt/ailinux/ailinux-helper.py /usr/local/bin/aihelp
+    
+    # Move .env file to final location
+    if [ -f '/tmp/.env' ]; then
+        mv /tmp/.env /opt/ailinux/.env
+        chmod 600 /opt/ailinux/.env
+    fi
+    
+    echo "Basic AILinux Helper installed as fallback."
 fi
 
-# Update desktop database
-if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database /usr/share/applications
+# Verify installation
+if command -v ailinux-app >/dev/null 2>&1; then
+    echo "✅ AILinux App is available: $(which ailinux-app)"
+else
+    echo "ℹ️  AILinux App not found - using basic helper"
 fi
 
-echo "AILinux App installed successfully!"
-echo "Configure your API key: sudo nano /opt/ailinux/.env"
-echo "Start with: ailinux-app"
-POSTINST
-chmod +x "$PKG_DIR/DEBIAN/postinst"
+if command -v aihelp >/dev/null 2>&1; then
+    echo "✅ AILinux Helper is available: $(which aihelp)"
+else
+    echo "⚠️  AILinux Helper not found"
+fi
 
-# Create prerm script
-cat > "$PKG_DIR/DEBIAN/prerm" << 'PRERM'
-#!/bin/bash
-set -e
-# Cleanup script for ailinux-app removal
-echo "Removing AILinux App..."
-PRERM
-chmod +x "$PKG_DIR/DEBIAN/prerm"
-
-# Build the package
-echo "Building ailinux-app package..."
-dpkg-deb --build "$PKG_DIR" /tmp/ailinux-app_1.0.0_all.deb
-
-# Create local repository
-echo "Setting up local APT repository..."
-mkdir -p /var/cache/apt/archives/ailinux
-cp /tmp/ailinux-app_1.0.0_all.deb /var/cache/apt/archives/ailinux/
-
-# Create Packages file for local repo
-cd /var/cache/apt/archives/ailinux
-dpkg-scanpackages . /dev/null | gzip -9c > Packages.gz
-
-# Add local repository to sources
-echo "deb [trusted=yes] file:///var/cache/apt/archives/ailinux ./" > /etc/apt/sources.list.d/ailinux-local.list
-
-# Update package database
-apt-get update
-
-# Install the package
-echo "Installing ailinux-app via APT..."
-apt-get install -y ailinux-app
-
-echo "AILinux App successfully installed and available via APT!"
-echo "You can now use: sudo apt install ailinux-app"
-echo "Start the app with: ailinux-app"
-
+echo "AILinux AI components installation completed."
 AI_EOF
 
     sudo cp /tmp/install_ai.sh "${CHROOT_DIR}/tmp/"
@@ -1014,7 +596,7 @@ AI_EOF
     run_in_chroot "/tmp/install_ai.sh"
     sudo rm -f "${CHROOT_DIR}/tmp/install_ai.sh" /tmp/install_ai.sh || true
     
-    log_success "AILinux AI components and APT package installed."
+    log_success "AILinux AI components installed."
 }
 
 step_05_configure_calamares() {
