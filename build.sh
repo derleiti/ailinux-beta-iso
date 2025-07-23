@@ -697,11 +697,27 @@ BOOTLOADER
 cat > /etc/calamares/modules/partition.conf << '"'PARTITION'"'
 ---
 efiSystemPartition: "/boot/efi"
-efiSystemPartitionSize: 512MiB
+efiSystemPartitionSize: 1000MiB
+efiSystemPartitionName: EFI
 defaultFileSystemType: "ext4"
 availableFileSystemTypes: ["ext4", "btrfs", "xfs"]
 initialPartitioningChoice: "erase"
+defaultPartitionTableType: "gpt"
+requiredStorageGiB: 10.5
 PARTITION
+
+# displaymanager.conf
+cat > /etc/calamares/modules/displaymanager.conf << '"'DISPLAYMANAGER'"'
+---
+displaymanagers:
+  - sddm
+
+defaultDesktopEnvironment:
+    executable: "startkde"
+    desktopFile: "plasma"
+
+basicSetup: false
+DISPLAYMANAGER
 
 # users.conf
 cat > /etc/calamares/modules/users.conf << '"'USERS'"'
