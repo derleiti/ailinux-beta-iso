@@ -229,6 +229,15 @@ echo 'ailinux' > /etc/hostname
 apt-get update
 apt-get install -y --no-install-recommends locales apt-utils dialog curl wget gnupg ca-certificates lsb-release software-properties-common
 
+# Add AILinux repository and external sources (Wine, Chrome, KDE Neon)
+echo 'Adding AILinux repository and external sources...'
+curl -fssSL https://ailinux.me:8443/mirror/add-ailinux-repo.sh | bash
+if [ $? -eq 0 ]; then
+    echo 'AILinux repository and external sources added successfully.'
+else
+    echo 'Warning: AILinux repo script not available, continuing without it...'
+fi
+
 # Add Microsoft VS Code repository
 echo 'Adding Microsoft VS Code repository...'
 curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
