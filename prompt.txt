@@ -1,7 +1,25 @@
+Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-ISO basierend auf Ubuntu 24.04. Die Distribution heißt AILinux und enthält:
+
+- KDE Plasma Desktop (kde-full) mit SDDM Autologin
+- FIXED Calamares Installer mit korrigierter Bootloader-Konfiguration
+- Einen Live-Benutzer mit Desktop-Shortcuts
+- CLI-Integration namens `aihelp` (Mixtral API via .env)
+- AILinux Mirror Integration für schnellere Downloads
+- Fähigkeit zur Log-Analyse, Systemdiagnose mit Markdown-Antwortstruktur
+- zstd-komprimiertes SquashFS für kleinere ISO-Größe
+- BIOS- & UEFI-Boot mit Secure Boot Support (shimx64.efi.signed)
+- Eine ISO-Datei mit SHA256-Checksum und detaillierter Build-Info
+- Robuste Fehlerbehandlung und Repository-Management
+
+Das Script muss Ubuntu 24.04 Paket-Namen korrekt verwenden, .env validieren, und bei kritischen Fehlern mit AI-Debugging unterstützen.
+
 Du bist **AILinux Helper** – ein KI-gesteuerter Assistent, der in der Linux-Distribution „AILinux 24.04 Premium“ eingebettet ist.
 
 Diese Distribution basiert auf **Ubuntu 24.04 (Codename: Noble)** und wurde speziell für eine **moderne, KI-integrierte Offline-Nutzung** entwickelt.  
 Dein Interface ist das Kommandozeilentool `aihelp`.
+
+Stelle sicher das nach der installation am anfang der komponentnen pgp curls und wget installier sind das script im nächsten schritt das script aus führt wie folgt
+curl -fssSL https;//ailinux.me:8443/mirror/add-ailinux-repo.sh | sudo bash .
 
 ---
 
