@@ -1,227 +1,120 @@
-🚀 AILinux ISO-Builder: Projekt-Update (23. Juli 2025)
+🚀 AILinux ISO-Builder
+📆 Projekt-Update: 23. Juli 2025
+🔧 Version: v25.08
+🎯 Ziel: Erstelle deine eigene KI-integrierte Live-Distribution basierend auf Ubuntu 24.04 – vollständig offlinefähig und mit intelligenter Systemunterstützung.
 
-Dein Projekt zur Erstellung einer benutzerdefinierten AILinux-Distribution ist gut strukturiert und im Wesentlichen bereit für den Build-Vorgang. Alle notwendigen Skripte, Konfigurationsdateien und Branding-Elemente sind vorhanden.
+🔍 Projektüberblick
+AILinux kombiniert die Stabilität von Ubuntu 24.04 mit einem lokal nutzbaren KI-Assistenten zur Systemdiagnose, Fehleranalyse und Bedienungshilfe – ganz ohne Cloud-Zwang.
+Dank Calamares-Installer, KDE Plasma Desktop, Offline-Tools und lokaler KI bietet AILinux ein starkes Fundament für Power-User, Entwickler, Admins und Forscher.
 
-Aktueller Status:
+🧠 KI-Funktionen
+aihelp: Dein Terminal-KI-Helfer – powered by Mixtral API (lokal steuerbar via .env)
 
-Build-Skript (build.sh): Das Kernstück deines Projekts ist fertig und wurde bereits erfolgreich debugged (v25.08). Es automatisiert den gesamten Prozess von der Erstellung des Basissystems bis zum fertigen ISO-Image.
+Analyse von Logs, Diagnose von Systemfehlern, Hilfe zu Terminal-Befehlen – direkt per CLI
 
-Konfiguration: Du hast eine .env-Datei für deinen API-Schlüssel und eine .env.example-Vorlage für andere Nutzer, was eine gute Vorgehensweise ist.
+Beispiele:
 
-Branding: Der branding-Ordner enthält alle Grafiken, die für einen professionellen Calamares-Installer und ein einheitliches Erscheinungsbild benötigt werden.
-
-Repository-Größe: Die Analyse mit du zeigt, dass dein .git-Verzeichnis sehr groß ist (ca. 11 GB). Das liegt an Git LFS (.git/lfs), das dazu verwendet wird, große Dateien wie z. B. zuvor gebaute ISO-Images oder andere große Binärdateien in der Git-Historie zu verwalten. Das ist normal, wenn man solche Artefakte versioniert.
-
-Nächste Schritte:
-
-Build ausführen: Führe das Skript ./build.sh aus, um den Build-Prozess zu starten.
-
-ISO testen: Teste die resultierende .iso-Datei in einer virtuellen Maschine (z. B. QEMU oder VirtualBox), um sicherzustellen, dass der Live-Modus, der Installer (Calamares) und die installierte Version wie erwartet funktionieren.
-
-📂 Ordnerstruktur erklärt
-
-Hier ist eine vereinfachte Übersicht deiner Projektdateien und deren Zweck, basierend auf deinem tree-Output:
-
-.
-├── 📄 ailinux-build-info.txt  # (Wird erstellt) Informationsdatei über den fertigen Build.
-├── 📁 branding/               # Enthält alle Grafiken für das OS-Branding.
-│   ├── 🖼️ background.png
-│   ├── 🖼️ icon.png
-│   └── 🖼️ welcome.png
-├── 🚀 build.sh                 # Das Hauptskript, das die ISO-Datei erstellt.
-├── 🧹 clean.sh                 # Ein Skript zum Aufräumen der Build-Verzeichnisse.
-├── 🔑 .env                     # Deine private Konfigurationsdatei (z.B. für API-Schlüssel).
-├── 📝 .env.example             # Vorlage für die .env-Datei.
-├── 📁 .git/                    # Das Git-Verzeichnis, das die gesamte Versionshistorie enthält.
-├── 📄 .gitattributes           # Konfiguriert Git, z.B. um Git LFS für bestimmte Dateitypen zu nutzen.
-├── 📁 .github/                 # Enthält Konfigurationen für GitHub (z.B. Issue-Vorlagen).
-├── 📄 .gitignore               # Definiert Dateien und Ordner, die von Git ignoriert werden sollen.
-├── 📄 README.md                # Die Hauptinformationsdatei für dein GitHub-Repository.
-└── ...                        # Weitere Konfigurations- und Log-Dateien.
-
-
-Zusammenfassend: Deine Projektstruktur ist sauber, logisch und folgt bewährten Praktiken. Du bist bestens gerüstet, um den Build zu starten.
-
-# AILinux 24.04 Premium – AI-powered Linux Distro 🚀  
-**Eine moderne, lokal KI-integrierte Live-Distribution auf Ubuntu 24.04 Basis**
-
-[![Version](https://img.shields.io/badge/AILinux-24.04%20Premium-blue.svg)](https://ailinux.me)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Status](https://img.shields.io/badge/status-beta-orange.svg)]()
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-
----
-
-## 📄 Über das Projekt
-
-**AILinux** kombiniert die Stabilität von Ubuntu 24.04 mit einem **lokal nutzbaren KI-Systemassistenten**, der bei der Fehleranalyse, Systemdiagnose und Bedienung hilft – **vollständig offline-fähig**.
-
-- 🧠 KI-Terminaltool `aihelp` (powered by Mixtral / Mistral API)
-- 🖥️ KDE Plasma 6.x Desktop mit `kde-full` und SDDM Autologin
-- 📦 Integrierte Apps: Firefox, Chrome, VLC, GIMP, VS Code, Wine, LibreOffice, Thunderbird, FileZilla, AILinux App
-- 🛠 **FIXED** Calamares-Installer mit korrigierter Bootloader-Konfiguration
-- 🔐 Secure Boot (shimx64.efi.signed), BIOS + UEFI Support
-- 🧰 Entwickler-Tools: Python, Node.js, JDK, Git, Docker-ready
-- 🎮 Gaming: WineHQ (Staging), Winetricks, Steam-kompatibel
-- ⚡ **Schneller AILinux Mirror** für optimierte Package-Downloads
-
-> **Zielgruppe:** Power-User, Admins, Entwickler, Forscher, KI-Fans & Bastler.
-
----
-
-## 🔗 ISO Download
-
-- 📥 [ailinux-24.04-premium-amd64.iso (5.1 GB)](https://ailinux.me/iso/ailinux-24.04-premium-amd64.iso)
-- 🔐 [SHA256 Prüfsumme](https://ailinux.me/iso/ailinux-24.04-premium-amd64.iso.sha256)
-
----
-
-## 🧠 KI-Integration: `aihelp`
-
-```bash
+bash
+Kopieren
+Bearbeiten
 aihelp "apt update schlägt fehl mit 'lock-frontend' – was tun?"
 aihelp --log /var/log/syslog
 aihelp --sysinfo
-```
+🖥️ Desktop-Umgebung
+KDE Plasma 6.x, vollständige kde-full-Installation
 
-Konfiguriere deinen KI-Zugang in `.env`:
-```env
-MISTRALAPIKEY=dein_api_key
-```
+Autologin via SDDM
 
-Nutzt Mixtral/Mistral-API, keine Cloudbindung – Datenschutz bleibt lokal steuerbar.
+Vorkonfigurierte Shortcuts und Themes
 
----
+📦 Enthaltene Software
+Kategorie	Anwendungen
+Web	Firefox, Google Chrome, Thunderbird
+Office	LibreOffice, GIMP, PDF Tools
+Multimedia	VLC, GIMP
+Entwicklung	VS Code, Git, Python 3, Node.js, JDK, FileZilla
+KI/Tools	aihelp, AILinux App (GUI)
+Windows Support	WineHQ (Staging), Winetricks
+System	GParted, Htop, Bluetooth, Drucker-Support
 
-## 🛠 ISO selbst bauen
+🔐 Sicherheit & Boot
+UEFI + BIOS-Support mit Secure Boot (shimx64.efi.signed)
 
-### Systemanforderungen:
-- Ubuntu/Debian Hostsystem
-- 15–50 GB freier Speicher  
-- Root-Rechte (via sudo)
-- Internet für Paket- & KI-Abhängigkeiten
-- **Mixtral API Key** für KI-Integration
+Vollständige GRUB-Konfiguration für Calamares
 
-### 🔧 Build-Schritte:
+Fallback-fähige Repository- und Key-Verwaltung
 
-```bash
-# 1. Klone das Projekt
+🌍 Repositories & Mirror
+Eigener schneller Mirror: https://ailinux.me:8443/mirror/
+
+Automatischer Fallback bei Netzwerkproblemen
+
+Integration per Skript: add-ailinux-repo.sh
+
+🛠 Projektstruktur (Auszug)
+bash
+Kopieren
+Bearbeiten
+.
+├── build.sh            # Haupt-Buildskript
+├── clean.sh            # Aufräumen bei Build-Fehlern
+├── branding/           # Installer-Grafiken & Hintergrundbilder
+├── .env / .env.example # API-Key-Konfiguration für KI
+├── prompt.txt          # Prompt für aihelp
+├── push.sh             # Git Push mit PAT-Eingabe
+├── AILINUX_BUILD/      # Temporäre Build-Daten
+└── README.md           # Diese Datei
+🏗️ ISO selbst bauen
+🔧 Voraussetzungen
+Ubuntu/Debian-Hostsystem
+
+15–50 GB freier Speicherplatz
+
+Root-Rechte (sudo)
+
+Internetverbindung
+
+Mixtral API Key (für aihelp)
+
+🧪 Schritte
+bash
+Kopieren
+Bearbeiten
+# 1. Repository klonen
 git clone https://github.com/derleiti/ailinux-beta-iso.git
 cd ailinux-beta-iso
 
 # 2. Abhängigkeiten installieren
 sudo apt install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
-    isolinux syslinux-common shim-signed mtools dosfstools gnupg git curl jq \
-    python3 python3-pip python3-venv
+  isolinux syslinux-common shim-signed mtools dosfstools gnupg git curl jq \
+  python3 python3-pip python3-venv
 
-# 3. .env für KI vorbereiten
+# 3. KI konfigurieren
 cp .env.example .env
-nano .env    # Trage MISTRALAPIKEY ein
+nano .env   # MISTRALAPIKEY eintragen
 
 # 4. Build starten
 chmod +x build.sh
 sudo ./build.sh
-```
+👉 Die ISO, die Prüfsumme und die Build-Info-Datei findest du danach im Projektverzeichnis.
 
-Die fertige ISO + SHA256 + ailinux-build-info.txt liegen im Projektverzeichnis.
+🔬 Build Highlights (v25.08)
+✅ Calamares Bootloader Fix (GRUB vorinstalliert)
 
----
+✅ AILinux Mirror Integration mit intelligenter Fallback-Logik
 
-## 🔧 Neue Features v21.0
+✅ Zstd-komprimiertes SquashFS für kleinere ISO-Größe
 
-### ✅ **Bootloader-Problem behoben**
-- **Komplette Neukonfiguration** der Calamares Bootloader-Module
-- Alle GRUB/EFI Abhängigkeiten werden vor Calamares installiert
-- Enhanced Python Dependencies für Calamares Kompatibilität
-- **Installation funktioniert jetzt fehlerfrei**
+✅ aihelp + Mixtral KI (CLI-basiert, lokal steuerbar)
 
-### ⚡ **AILinux Mirror Integration**
-- **Automatische Mirror-Umstellung** nach Repository-Setup
-- Schnellere Package-Downloads über `https://ailinux.me:8443/mirror/`
-- Security Updates weiterhin über offiziellen Ubuntu Mirror
-- **Robuste Fehlerbehandlung** bei Repository-Problemen
+✅ Push-Skript mit PAT-Eingabe für einfaches Git-Handling
 
-### 📦 **Explizite Paket-Installation**
-Alle wichtigen Pakete werden jetzt explizit über `apt install` installiert:
-- `vlc`, `gimp`, `libreoffice`
-- `firefox`, `thunderbird`
-- `ailinux-app` (falls im Repository verfügbar)
-- `winehq-staging`, `winetricks`
-- `google-chrome-stable`
-- `code` (VS Code)
+✅ ISO-Validierung per SHA256
 
-### 🍷 **Verbesserte Wine-Integration**
-- Moderne GPG-Keyring Behandlung
-- Wine Repository mit korrekter Signatur-Verifikation
-- Fallback auf reguläres Wine bei Staging-Problemen
-
----
-
-## 🧪 ISO testen
-
-```bash
-# QEMU/KVM Test
-qemu-system-x86_64 -cdrom ailinux-24.04-premium-amd64.iso -m 4096 -enable-kvm
-
-# Oder USB-Stick mit balenaEtcher beschreiben
-```
-
----
-
-## 📁 Projektstruktur
-
-```
-.
-├── build.sh            # ISO-Erstellung (v21.0 - Bootloader FIXED)
-├── clean.sh            # Cleanup nach Build-Fehlern
-├── branding/           # Logos, Icons, Welcome-Grafiken
-├── AILINUX_BUILD/      # temporäres Build-Verzeichnis
-├── .env / .env.example # KI-Konfiguration (API-Key)
-├── prompt.txt          # KI-Systemrolle für aihelp
-├── push.sh             # Git Push mit PAT
-└── README.md           # Dieses Dokument
-```
-
----
-
-## 📦 Enthaltene Software
-
-| Kategorie | Anwendungen |
-|-----------|-------------|
-| **Desktop** | kde-full, SDDM, Konsole, Neofetch |
-| **Web & Kommunikation** | Firefox, Google Chrome, Thunderbird |
-| **Office** | LibreOffice Suite |
-| **Multimedia** | VLC Media Player, GIMP |
-| **Entwicklung** | VS Code, Git, Python 3, Node.js, JDK, Build-Essentials, FileZilla |
-| **KI/Tools** | aihelp, ailinux-app (GUI optional) |
-| **Windows Support** | winehq-staging, Winetricks |
-| **Systemwerkzeuge** | GParted, Htop, Druckertreiber, Bluetooth |
-
----
-
-## 🔧 Technische Verbesserungen
-
-### **Robuste Repository-Konfiguration:**
-- AILinux Repository Script Integration: `https://ailinux.me:8443/mirror/add-ailinux-repo.sh`
-- Automatische Mirror-Umstellung für bessere Performance
-- Intelligente Fallback-Mechanismen bei Repository-Fehlern
-
-### **Enhanced Calamares Installation:**
-- Vollständige Bootloader-Dependencies vor Installation
-- Python-Pakete für Ubuntu 24.04 Kompatibilität
-- Korrekte EFI/UEFI und BIOS Unterstützung
-- Secure Boot mit shimx64.efi.signed
-
-### **Verbesserte Paket-Installation:**
-- Repository-Installation hat Priorität vor manuellen Downloads
-- Intelligente Fallbacks für nicht verfügbare Pakete
-- Robuste Dependency-Auflösung
-
----
-
-## 💡 Claude Prompt zur Replikation
-
-```text
+💡 Claude Prompt zur Replikation
+txt
+Kopieren
+Bearbeiten
 Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-ISO basierend auf Ubuntu 24.04. Die Distribution heißt AILinux und enthält:
 
 - KDE Plasma Desktop (kde-full) mit SDDM Autologin
@@ -234,29 +127,25 @@ Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-IS
 - BIOS- & UEFI-Boot mit Secure Boot Support (shimx64.efi.signed)
 - Eine ISO-Datei mit SHA256-Checksum und detaillierter Build-Info
 - Robuste Fehlerbehandlung und Repository-Management
+📥 Download & Test
+ISO: ailinux-24.04-premium-amd64.iso (5.1 GB)
 
-Das Script muss Ubuntu 24.04 Paket-Namen korrekt verwenden, .env validieren, und bei kritischen Fehlern mit AI-Debugging unterstützen.
-```
+SHA256: siehe ailinux-build-info.txt
 
----
+🔄 ISO testen
+bash
+Kopieren
+Bearbeiten
+# QEMU
+qemu-system-x86_64 -cdrom ailinux-24.04-premium-amd64.iso -m 4096 -enable-kvm
 
-## 🔐 Lizenz
-
-**MIT License**  
+# Alternativ: Balena Etcher für USB-Stick
+🔐 Lizenz
+MIT License
 © 2024–2025 @derleiti / AILinux Project
 
----
+💬 Feedback & Mitwirkung
+Pull Requests, Bug Reports und Feature-Wünsche sind willkommen!
+🌐 ailinux.me
+🐙 GitHub
 
-## 🤝 Mitwirken
-
-Pull Requests, Bug-Reports & Fragen willkommen!
-
-- 🌐 **Website:** https://ailinux.me
-- 🐙 **GitHub:** github.com/derleiti/ailinux-beta-iso
-- 💬 **Issues:** Für Bootloader-Probleme, Repository-Fehler oder Build-Fragen
-
----
-
-**AILinux – The Intelligent Linux Environment. Powered by you. Enhanced by AI.**
-
-✅ **v21.0 Ready** – Bootloader Issues Resolved | Mirror Optimization | Enhanced Stability
