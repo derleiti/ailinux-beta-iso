@@ -261,23 +261,32 @@ step_03_install_packages() {
     
     # Definiere Paketlisten als Arrays für bessere Lesbarkeit
     local KERNEL_BOOT_PKGS=(
-        linux-image-generic linux-headers-generic casper discover
+        linux-image-generic linux-headers-generic casper
         laptop-detect os-prober network-manager resolvconf net-tools
         wireless-tools plymouth-theme-spinner ubuntu-standard
         keyboard-configuration console-setup sudo systemd systemd-sysv
-        dbus init rsyslog grub-efi-amd64 shim-signed initramfs-tools live-boot
+        dbus init rsyslog grub-efi-amd64 grub-efi-amd64-bin grub-efi-amd64-signed
+        shim-signed grub2-common efibootmgr
+        initramfs-tools live-boot mokutil
     )
-    local KDE_PKGS=(
-        kde-full plasma-desktop sddm-theme-breeze xorg xserver-xorg-video-all
+    local KDE_ESSENTIAL_PKGS=(
+        plasma-desktop plasma-workspace plasma-nm plasma-pa
+        sddm sddm-theme-breeze xorg xserver-xorg-video-all
+        plasma-discover plasma-discover-common discover
+        konsole kate dolphin gwenview okular ark
+        plasma-systemmonitor kcalc spectacle kwrite
+        plasma-browser-integration plasma-thunderbolt
+    )
+    local KDE_FULL_PKG=(
+        kde-full
     )
     local CORE_APPS=(
-        firefox thunderbird vlc gimp libreoffice gparted htop neofetch
-        konsole kate okular gwenview ark dolphin ubuntu-restricted-extras
-        ffmpeg pulseaudio pavucontrol git build-essential cmake
-        python3 python3-pip python3-venv python3-dev nodejs npm default-jdk
-        linux-firmware bluez bluetooth wpasupplicant printer-driver-all cups
+        firefox thunderbird vlc gimp filezilla gparted htop neofetch
+        ffmpeg pulseaudio pavucontrol git build-essential
+        python3 python3-pip python3-venv python3-dev 
+        linux-firmware bluez bluetooth wpasupplicant cups
         jq tree vim nano curl wget unzip zip software-properties-common
-        apt-transport-https filezilla
+        apt-transport-https steam-installer
     )
     
     local install_script
@@ -287,47 +296,74 @@ set -ex
 echo "Installiere Kernel, Boot-Komponenten und System-Tools..."
 apt-get install -y --no-install-recommends ${KERNEL_BOOT_PKGS[*]}
 
-echo "Installiere vollständige KDE-Desktop-Umgebung..."
-apt-get install -y --no-install-recommends ${KDE_PKGS[*]}
+echo "Installiere BIOS-Kompatibilitäts-Pakete separat..."
+# Installiere grub-pc separat nach grub-efi für BIOS-Kompatibilität
+if ! apt-get install -y --no-install-recommends grub-pc grub-pc-bin; then
+    echo "WARNING: BIOS grub-pc Installation fehlgeschlagen - nur EFI verfügbar"
+fi
+
+echo "Installiere KDE Essential-Pakete (inkl. Discover)..."
+# Installiere alle essentiellen KDE-Pakete inklusive Discover
+apt-get install -y --no-install-recommends ${KDE_ESSENTIAL_PKGS[*]}
+
+echo "Installiere kde-full für vollständigen Plasma 6 Desktop..."
+# Jetzt kann kde-full erfolgreich installiert werden, da alle Abhängigkeiten vorhanden sind
+if apt-get install -y --no-install-recommends ${KDE_FULL_PKG[*]}; then
+    echo "SUCCESS: kde-full erfolgreich installiert mit allen Abhängigkeiten"
+    # Sofortige Bereinigung für Platzeinsparung
+    apt-get autoremove -y --purge || true
+    apt-get autoclean || true
+else
+    echo "WARNING: kde-full Installation fehlgeschlagen trotz Abhängigkeiten"
+    echo "INFO: KDE Essential-Pakete bereits installiert - Desktop funktionsfähig"
+fi
 
 echo "Installiere Kernanwendungen und Entwicklungstools..."
 apt-get install -y --no-install-recommends ${CORE_APPS[*]}
 
 echo "Installiere spezielle Pakete mit Fallbacks..."
 
-# Versuche, AILinux-App aus dem Repository zu installieren
-if ! apt-get install -y ailinux-app; then
-    echo "Warnung: AILinux-App nicht im Repository gefunden. Wird später manuell installiert."
+# AILinux-App - KRITISCH für Anforderungen
+echo "Installiere AILinux-App..."
+if apt-get install -y --no-install-recommends ailinux-app; then
+    echo "SUCCESS: AILinux-App erfolgreich installiert"
+else
+    echo "WARNING: AILinux-App nicht im Repository gefunden. Wird später manuell installiert."
 fi
 
-# Wine-Pakete
-if ! apt-get install -y --install-recommends winehq-staging; then
-    echo "Warnung: winehq-staging fehlgeschlagen, versuche Standard-Wine..."
-    apt-get install -y wine64 wine32 winetricks || echo "Warnung: Wine-Installation fehlgeschlagen."
+# Wine-Pakete - KRITISCH für Anforderungen
+echo "Installiere Wine und Winetricks..."
+if apt-get install -y --no-install-recommends winehq-staging winetricks; then
+    echo "SUCCESS: Wine erfolgreich installiert"
+else
+    echo "WARNING: winehq-staging fehlgeschlagen, verwende Standard-Wine..."
+    apt-get install -y --no-install-recommends wine64 wine32 winetricks || echo "ERROR: Wine-Installation fehlgeschlagen."
 fi
 
-# Google Chrome
-if ! apt-get install -y google-chrome-stable; then
-    echo "Info: Google Chrome nicht im Repo gefunden, versuche manuellen Download..."
+# Google Chrome - KRITISCH für Anforderungen
+echo "Installiere Google Chrome..."
+if apt-get install -y --no-install-recommends google-chrome-stable; then
+    echo "SUCCESS: Google Chrome erfolgreich installiert"
+else
+    echo "INFO: Google Chrome nicht im Repo, verwende manuellen Download..."
     wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
-    (dpkg -i /tmp/chrome.deb || apt-get -f install -y)
+    (dpkg -i /tmp/chrome.deb || apt-get -f install -y) && \
+    echo "SUCCESS: Google Chrome manuell installiert"
     rm -f /tmp/chrome.deb
 fi
 
-# VS Code
-if ! apt-get install -y code; then
-    echo "Info: VS Code nicht im Repo gefunden, versuche manuellen Download..."
-    wget -q 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64' -O /tmp/vscode.deb && \
-    (dpkg -i /tmp/vscode.deb || apt-get -f install -y)
-    rm -f /tmp/vscode.deb
-fi
+# PyQt5 für AILinux App - Minimal installation
+echo "Installiere PyQt5 minimal für AILinux App..."
+apt-get install -y --no-install-recommends python3-pyqt5 python3-pyqt5.qtwidgets python3-pyqt5.qtgui || \
+    echo "WARNING: PyQt5 Installation fehlgeschlagen"
 
-# PyQt5 Pakete für Ubuntu 24.04
-echo "Installiere PyQt5 für AILinux App..."
-if ! apt-get install -y python3-pyqt5 python3-pyqt5.qtwidgets python3-pyqt5.qtgui; then
-    echo "Warnung: PyQt5 aus APT fehlgeschlagen, versuche pip..."
-    python3 -m pip install --break-system-packages PyQt5 || echo "FEHLER: PyQt5 konnte nicht installiert werden. GUI-Apps könnten betroffen sein."
-fi
+# Aggressive Cleanup für kleinere ISO
+echo "Bereinige unnötige Pakete für kleinere ISO..."
+apt-get autoremove -y --purge
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+rm -rf /tmp/*
+rm -rf /var/tmp/*
 
 echo "Paketinstallation abgeschlossen."
 PACKAGES_EOF
@@ -669,28 +705,38 @@ unpack:
       destination: ""
 UNPACKFS
 
-# bootloader.conf - KRITISCHE KORRIGIERTE VERSION
+# bootloader.conf - DUAL BOOT UNTERSTÜTZUNG (EFI + BIOS)
 cat > /etc/calamares/modules/bootloader.conf << '"'BOOTLOADER'"'
 ---
+# Basic bootloader configuration
 efiBootloaderId: "ailinux"
-# "grub" ist Standard und wird hier verwendet
-bootloaderType: "grub"
-# UEFI-Installationsparameter
-efiDirectory: /boot/efi
-# Secure Boot Unterstützung
+bootloader: "grub"
+installPath: "/boot/efi"
+noProbe: false
+timeout: 10
+
+# Kernel parameters
+kernelLine: ",quiet splash"
+fallbackKernelLine: ",quiet splash"
+
+# GRUB configuration
+grubInstall: "grub-install"
+grubMkconfig: "grub-mkconfig"
+grubCfg: "/boot/grub/grub.cfg"
+
+# EFI specific settings
+efiBootLoaderPath: "/boot/efi/EFI/ailinux"
+
+# Installation parameters - DUAL BOOT UNTERSTÜTZUNG
+efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --recheck --no-nvram"
+biosInstallParams: "--target=i386-pc --recheck --force"
+
+# Secure boot support
 secureBootSupport: true
-# Kernel-Pfade
-kernel: /vmlinuz
-img: /initrd.img
-fallback: /initrd.img
-# GRUB Installationsparameter
-grubInstall: grub-install
-grubMkconfig: grub-mkconfig
-grubCfg: /boot/grub/grub.cfg
-# EFI-spezifische Parameter
-efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --recheck"
-# BIOS-spezifische Parameter
-biosInstallParams: "--target=i386-pc --recheck"
+
+# Erlaubt Installation auf beiden Modi
+efiBootloader: "grub-efi-amd64"
+biosBootloader: "grub-pc"
 BOOTLOADER
 
 # partition.conf
@@ -829,11 +875,18 @@ set -e
 # Aktiviere wichtige Dienste
 systemctl enable bluetooth cups NetworkManager sddm
 
-# Bereinige Paket-Cache und temporäre Dateien
+# Erweiterte Bereinigung für kleinere ISO
 apt-get autoremove -y --purge
+apt-get autoclean
 apt-get clean
 rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+rm -rf /var/cache/apt/archives/*.deb
+rm -rf /var/cache/apt/archives/partial/*
 find /var/log -type f -exec truncate --size 0 {} \;
+# Entferne zusätzliche temporäre Dateien
+rm -rf /root/.cache /home/*/.cache
+rm -rf /usr/share/doc/* /usr/share/man/*
+rm -rf /var/cache/fontconfig/*
 
 # Setze machine-id zurück
 rm -f /etc/machine-id /var/lib/dbus/machine-id
