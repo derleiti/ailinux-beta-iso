@@ -274,8 +274,7 @@ step_03_install_packages() {
         sddm sddm-theme-breeze xorg xserver-xorg-video-all
         plasma-discover plasma-discover-common discover
         konsole kate dolphin gwenview okular ark
-        plasma-systemmonitor kcalc spectacle kwrite
-        plasma-browser-integration plasma-thunderbolt
+        plasma-systemmonitor kcalc kwrite
     )
     local KDE_FULL_PKG=(
         kde-full
