@@ -704,14 +704,13 @@ unpack:
       destination: ""
 UNPACKFS
 
-# bootloader.conf - DUAL BOOT UNTERSTÜTZUNG (EFI + BIOS)
+# bootloader.conf - VEREINFACHT für Calamares Kompatibilität
 cat > /etc/calamares/modules/bootloader.conf << '"'BOOTLOADER'"'
 ---
 # Basic bootloader configuration
 efiBootloaderId: "ailinux"
 bootloader: "grub"
 installPath: "/boot/efi"
-noProbe: false
 timeout: 10
 
 # Kernel parameters
@@ -723,32 +722,45 @@ grubInstall: "grub-install"
 grubMkconfig: "grub-mkconfig"
 grubCfg: "/boot/grub/grub.cfg"
 
-# EFI specific settings
-efiBootLoaderPath: "/boot/efi/EFI/ailinux"
-
-# Installation parameters - DUAL BOOT UNTERSTÜTZUNG
-efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux --recheck --no-nvram"
-biosInstallParams: "--target=i386-pc --recheck --force"
-
-# Secure boot support
-secureBootSupport: true
-
-# Erlaubt Installation auf beiden Modi
-efiBootloader: "grub-efi-amd64"
-biosBootloader: "grub-pc"
+# Installation parameters
+efiInstallParams: "--target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ailinux"
+biosInstallParams: "--target=i386-pc"
 BOOTLOADER
 
-# partition.conf
+# partition.conf - KORRIGIERT für automatische Partitionierung
 cat > /etc/calamares/modules/partition.conf << '"'PARTITION'"'
 ---
+# EFI System Partition Einstellungen
 efiSystemPartition: "/boot/efi"
 efiSystemPartitionSize: 1000MiB
 efiSystemPartitionName: EFI
+efiSystemPartitionMountPoint: "/boot/efi"
+
+# Automatische Partitionierung
 defaultFileSystemType: "ext4"
 availableFileSystemTypes: ["ext4", "btrfs", "xfs"]
 initialPartitioningChoice: "erase"
 defaultPartitionTableType: "gpt"
 requiredStorageGiB: 10.5
+
+# KRITISCH: Automatische EFI Partition für Bootloader
+always_show_partition_labels: true
+drawNestedPartitions: false
+
+# Partition Layout für automatische Installation
+partitionLayout:
+    - name: "efi"
+      filesystem: "fat32"
+      mountPoint: "/boot/efi"
+      size: "1000MiB"
+    - name: "root"
+      filesystem: "ext4" 
+      mountPoint: "/"
+      size: "100%"
+
+# Bootloader Support
+ensureSuspendToDisk: true
+userSwapChoices: ["suspend", "file"]
 PARTITION
 
 # displaymanager.conf
