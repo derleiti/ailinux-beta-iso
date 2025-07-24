@@ -1,4 +1,3 @@
-npx claude-flow swarm "
 🧭 Aufgabe:
 Analysiere das Repository https://github.com/derleiti/ailinux-beta-iso **inkl. README.md, prompt.txt und build.sh**.
 
@@ -28,7 +27,7 @@ Nutze die bestehende build.sh im Repo als Baseline und verbessere sie gemäß ob
 📁 Dateiname:
 Die neue Datei soll als `build.sh` generiert und direkt ausführbar sein.
 
-🛠️ Fehlerbehebung: Bootloader-Skriptproblem beim Installieren
+🛠 Fehlerbehebung: Bootloader-Skriptproblem beim Installieren
 
 Im aktuellen AILinux-ISO schlägt die Calamares-Installation nach dem Entpacken der Systemdateien fehl. Ursache ist ein Python-Skript im Bootloader-Modul, vermutlich beim Aufruf von `grub-install` oder bei Secure-Boot-Komponenten.
 
@@ -40,5 +39,3 @@ Bitte implementiere im neuen `build.sh` oder im Calamares-Kontext folgende Maßn
   - Prüfung, ob `/sys/firmware/efi` verfügbar ist
   - Optionale Integration von `systemd-boot` als Alternativlösung bei UEFI-Systemen
 - Ziel: Der Calamares-Installer darf nach dem Entpacken nicht mehr durch das Bootloader-Modul fehlschlagen. Der Fix soll so generisch wie möglich, aber AILinux-spezifisch angepasst sein.
-
-"
