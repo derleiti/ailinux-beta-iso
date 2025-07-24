@@ -28,4 +28,17 @@ Nutze die bestehende build.sh im Repo als Baseline und verbessere sie gemäß ob
 📁 Dateiname:
 Die neue Datei soll als `build.sh` generiert und direkt ausführbar sein.
 
+🛠️ Fehlerbehebung: Bootloader-Skriptproblem beim Installieren
+
+Im aktuellen AILinux-ISO schlägt die Calamares-Installation nach dem Entpacken der Systemdateien fehl. Ursache ist ein Python-Skript im Bootloader-Modul, vermutlich beim Aufruf von `grub-install` oder bei Secure-Boot-Komponenten.
+
+Bitte implementiere im neuen `build.sh` oder im Calamares-Kontext folgende Maßnahmen:
+
+- Eine **Fallback-Erkennung**, falls `shimx64.efi.signed`, `grub-install`, `efibootmgr` oder `/boot/efi` fehlen
+- Einen robusten **Fix für das Bootloader-Modul**, z. B. durch:
+  - manuelle Ausführung von `grub-install` in der chroot-Umgebung mit `--no-nvram`
+  - Prüfung, ob `/sys/firmware/efi` verfügbar ist
+  - Optionale Integration von `systemd-boot` als Alternativlösung bei UEFI-Systemen
+- Ziel: Der Calamares-Installer darf nach dem Entpacken nicht mehr durch das Bootloader-Modul fehlschlagen. Der Fix soll so generisch wie möglich, aber AILinux-spezifisch angepasst sein.
+
 "
