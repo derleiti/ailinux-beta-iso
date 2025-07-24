@@ -1,151 +1,87 @@
-🚀 AILinux ISO-Builder
-📆 Projekt-Update: 23. Juli 2025
-🔧 Version: v25.08
-🎯 Ziel: Erstelle deine eigene KI-integrierte Live-Distribution basierend auf Ubuntu 24.04 – vollständig offlinefähig und mit intelligenter Systemunterstützung.
+# AILinux Beta ISO – Build Environment
 
-🔍 Projektüberblick
-AILinux kombiniert die Stabilität von Ubuntu 24.04 mit einem lokal nutzbaren KI-Assistenten zur Systemdiagnose, Fehleranalyse und Bedienungshilfe – ganz ohne Cloud-Zwang.
-Dank Calamares-Installer, KDE Plasma Desktop, Offline-Tools und lokaler KI bietet AILinux ein starkes Fundament für Power-User, Entwickler, Admins und Forscher.
+Dies ist das offizielle Build-Repository für die **AILinux ISO**, basierend auf **Ubuntu 24.04 (noble)** mit KDE Plasma Desktop, Secure Boot Support, Calamares Installer und integriertem AI-Terminal-Assistenten `aihelp`.
 
-🧠 KI-Funktionen
-aihelp: Dein Terminal-KI-Helfer – powered by Mixtral API (lokal steuerbar via .env)
+---
 
-Analyse von Logs, Diagnose von Systemfehlern, Hilfe zu Terminal-Befehlen – direkt per CLI
+## 🎯 Ziel
 
-Beispiele:
+Dieses Repository enthält das Skript `build.sh`, das automatisch eine vollständige, bootfähige Live-ISO von AILinux erzeugt – inklusive Mirror-Integration, Branding, AI-Funktionen und Bootloader-Support für UEFI und BIOS.
 
+---
+
+## 🚀 Features der ISO
+
+- ✅ **KDE Plasma Desktop** (KDE 6.3, minimal & modern)
+- ✅ **Calamares Installer** mit AILinux-Branding
+- ✅ **AI-Terminal-Assistent** (`aihelp`) via Mixtral API (optional via `.env`)
+- ✅ **Secure Boot Support** (shimx64.efi.signed, GRUB)
+- ✅ **Offline-fähige ISO** – kein Netzwerk beim Setup notwendig
+- ✅ **APT-Mirror-Integration**: `http://ailinux.me:8443/mirror/`
+- ✅ **GPG-Keytrennung**: `ubuntu-keyring` und `ailinux.gpg` sauber getrennt
+- ✅ **Fallback-Debug-Modul** bei Fehlern (`ai_debugger`)
+- ✅ **Build-Metadaten**: automatische Generierung von `ailinux-build-info.txt`
+
+---
+
+## 🧠 AI-gesteuerter Buildprozess (Claude Flow)
+
+Dieses Projekt verwendet [Claude Flow](https://github.com/ruvnet/claude-flow) zur Automatisierung des ISO-Build-Prozesses mit intelligenten Swarm-Agents. Die Datei `prompt.txt` enthält die vollständige Anweisung für Claude zur Generierung und Optimierung des `build.sh` Scripts.
+
+### ✨ Vorteile:
+- Parallele Ausführung durch BatchTool
+- Task-Zuweisung an Swarm-Agents (coder, tester, analyst, etc.)
+- Vollständige Build-Skripte durch Claude-Code
+- Fehlerbehandlung und automatische Verbesserung durch AI
+
+---
+
+## ⚙️ Verwendung
+
+### 1. Voraussetzungen
+
+```bash
+sudo apt install debootstrap squashfs-tools grub-pc-bin grub-efi-amd64-bin xorriso
+2. ISO bauen
 bash
 Kopieren
 Bearbeiten
-aihelp "apt update schlägt fehl mit 'lock-frontend' – was tun?"
-aihelp --log /var/log/syslog
-aihelp --sysinfo
-🖥️ Desktop-Umgebung
-KDE Plasma 6.x, vollständige kde-full-Installation
-
-Autologin via SDDM
-
-Vorkonfigurierte Shortcuts und Themes
-
-📦 Enthaltene Software
-Kategorie	Anwendungen
-Web	Firefox, Google Chrome, Thunderbird
-Office	LibreOffice, GIMP, PDF Tools
-Multimedia	VLC, GIMP
-Entwicklung	VS Code, Git, Python 3, Node.js, JDK, FileZilla
-KI/Tools	aihelp, AILinux App (GUI)
-Windows Support	WineHQ (Staging), Winetricks
-System	GParted, Htop, Bluetooth, Drucker-Support
-
-🔐 Sicherheit & Boot
-UEFI + BIOS-Support mit Secure Boot (shimx64.efi.signed)
-
-Vollständige GRUB-Konfiguration für Calamares
-
-Fallback-fähige Repository- und Key-Verwaltung
-
-🌍 Repositories & Mirror
-Eigener schneller Mirror: https://ailinux.me:8443/mirror/
-
-Automatischer Fallback bei Netzwerkproblemen
-
-Integration per Skript: add-ailinux-repo.sh
-
-🛠 Projektstruktur (Auszug)
-bash
-Kopieren
-Bearbeiten
-.
-├── build.sh            # Haupt-Buildskript
-├── clean.sh            # Aufräumen bei Build-Fehlern
-├── branding/           # Installer-Grafiken & Hintergrundbilder
-├── .env / .env.example # API-Key-Konfiguration für KI
-├── prompt.txt          # Prompt für aihelp
-├── push.sh             # Git Push mit PAT-Eingabe
-├── AILINUX_BUILD/      # Temporäre Build-Daten
-└── README.md           # Diese Datei
-🏗️ ISO selbst bauen
-🔧 Voraussetzungen
-Ubuntu/Debian-Hostsystem
-
-15–50 GB freier Speicherplatz
-
-Root-Rechte (sudo)
-
-Internetverbindung
-
-Mixtral API Key (für aihelp)
-
-🧪 Schritte
-bash
-Kopieren
-Bearbeiten
-# 1. Repository klonen
-git clone https://github.com/derleiti/ailinux-beta-iso.git
-cd ailinux-beta-iso
-
-# 2. Abhängigkeiten installieren
-sudo apt install -y debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin \
-  isolinux syslinux-common shim-signed mtools dosfstools gnupg git curl jq \
-  python3 python3-pip python3-venv
-
-# 3. KI konfigurieren
-cp .env.example .env
-nano .env   # MISTRALAPIKEY eintragen
-
-# 4. Build starten
 chmod +x build.sh
 sudo ./build.sh
-👉 Die ISO, die Prüfsumme und die Build-Info-Datei findest du danach im Projektverzeichnis.
+Die generierte ISO wird im Verzeichnis output/ gespeichert.
 
-🔬 Build Highlights (v25.08)
-✅ Calamares Bootloader Fix (GRUB vorinstalliert)
+🛠️ Bekannte Probleme
+❗ Bootloader-Fehler nach Entpacken:
+Bei manchen Systemen schlägt das Calamares-Modul zur GRUB-Installation fehl. Dies wird im Claude Flow Prompt berücksichtigt – mögliche Ursachen:
 
-✅ AILinux Mirror Integration mit intelligenter Fallback-Logik
+fehlendes shimx64.efi.signed
 
-✅ Zstd-komprimiertes SquashFS für kleinere ISO-Größe
+falsches Mounten von /boot/efi
 
-✅ aihelp + Mixtral KI (CLI-basiert, lokal steuerbar)
+UEFI vs. BIOS Mismatch
 
-✅ Push-Skript mit PAT-Eingabe für einfaches Git-Handling
+Lösung: Das build.sh enthält Fallback-Erkennung und optionale manuelle Installation via grub-install mit --no-nvram.
 
-✅ ISO-Validierung per SHA256
+📁 Wichtige Dateien
+Datei	Zweck
+build.sh	Hauptskript zur Erstellung der ISO
+prompt.txt	Claude Flow Prompt zur automatisierten Build-Generierung
+ailinux-build-info.txt	Metadaten zur Build-Umgebung
+CLAUDE.md	Claude Flow Ausgabedatei mit Kontext oder Status
 
-💡 Claude Prompt zur Replikation
-txt
+🧑‍💻 Lizenz
+MIT License – (c) 2024–2025 Markus Leitermann
+
+☁️ Hinweis
+Diese ISO ist vollständig offline installierbar. Netzwerkverbindungen werden während der Installation bewusst blockiert. Das AILinux-APT-Repository ist lokal eingebunden und signiert.
+
+🐾 Brumo sagt:
+„Kaffee rein, Build starten, ISO genießen.“ ☕🐻
+
+yaml
 Kopieren
 Bearbeiten
-Erstelle ein vollständiges ISO-Buildsystem in Bash zur Erstellung einer Live-ISO basierend auf Ubuntu 24.04. Die Distribution heißt AILinux und enthält:
 
-- KDE Plasma Desktop (kde-full) mit SDDM Autologin
-- FIXED Calamares Installer mit korrigierter Bootloader-Konfiguration
-- Einen Live-Benutzer mit Desktop-Shortcuts
-- CLI-Integration namens `aihelp` (Mixtral API via .env)
-- AILinux Mirror Integration für schnellere Downloads
-- Fähigkeit zur Log-Analyse, Systemdiagnose mit Markdown-Antwortstruktur
-- zstd-komprimiertes SquashFS für kleinere ISO-Größe
-- BIOS- & UEFI-Boot mit Secure Boot Support (shimx64.efi.signed)
-- Eine ISO-Datei mit SHA256-Checksum und detaillierter Build-Info
-- Robuste Fehlerbehandlung und Repository-Management
-📥 Download & Test
-ISO: ailinux-24.04-premium-amd64.iso (5.1 GB)
+---
 
-SHA256: siehe ailinux-build-info.txt
-
-🔄 ISO testen
-bash
-Kopieren
-Bearbeiten
-# QEMU
-qemu-system-x86_64 -cdrom ailinux-24.04-premium-amd64.iso -m 4096 -enable-kvm
-
-# Alternativ: Balena Etcher für USB-Stick
-🔐 Lizenz
-MIT License
-© 2024–2025 @derleiti / AILinux Project
-
-💬 Feedback & Mitwirkung
-Pull Requests, Bug Reports und Feature-Wünsche sind willkommen!
-🌐 ailinux.me
-🐙 GitHub
-
+Wenn du willst, kann ich dir gleich ein `write_readme.sh` mit reinpacken, das diese Datei automatisch erstellt oder ersetzt. Sag einfach Bescheid!
