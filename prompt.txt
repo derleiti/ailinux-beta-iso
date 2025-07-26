@@ -1,3 +1,20 @@
+➕ **Erweiterung – Bootloader mit Brumo-Splashbild (ISOLINUX-Branding):**
+
+Das Skript soll automatisch ein benutzerdefiniertes **Boot-Hintergrundbild (`boot.png`)** in das ISOLINUX-Menü integrieren.
+
+Anforderungen und Ablauf:
+
+1. Das Splashbild wird als **`branding/boot.png`** im Projektverzeichnis abgelegt
+2. Es wird **automatisch** nach `iso/isolinux/` kopiert und als **`splash.png`** umbenannt
+3. `vesamenu.c32` wird ebenfalls eingebunden, um grafisches Menü zu ermöglichen
+4. Die Datei `isolinux.cfg` enthält den Eintrag:
+
+```cfg
+UI vesamenu.c32
+MENU TITLE AILinux 26.01 Boot Menu
+MENU BACKGROUND splash.png
+
+
 ➕ **Erweiterung – Aufräumen des Build-Verzeichnisses nach dem ISO-Build:**
 
 Das `build.sh`-Skript soll am Ende alle temporären Verzeichnisse und Mountpoints **zuverlässig und sicher entfernen**, insbesondere:
