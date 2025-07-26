@@ -1,3 +1,21 @@
+➕ **Erweiterung – Aufräumen des Build-Verzeichnisses nach dem ISO-Build:**
+
+Das `build.sh`-Skript soll am Ende alle temporären Verzeichnisse und Mountpoints **zuverlässig und sicher entfernen**, insbesondere:
+
+- Chroot-Umgebung (z. B. `/mnt/ailinux/chroot`)
+- ISO-Artefaktverzeichnisse (z. B. `/mnt/ailinux/iso`)
+- Temporäre Cache-, Bootstrap- und Lock-Dateien
+- Persistente Mounts wie `proc`, `sys`, `dev`, `run`, `boot/efi` im Chroot
+
+Verwende dafür robuste Befehle wie:
+
+```bash
+umount -lf /mnt/ailinux/chroot/proc || true
+fuser -k /mnt/ailinux/chroot || true
+umount -R /mnt/ailinux/chroot || true
+rm -rf /mnt/ailinux
+
+
 ➕ **Erweiterung – Kein Netzwerk im Livesystem verfügbar:**
 
 Die aktuelle ISO bootet erfolgreich, aber **Netzwerkinterfaces sind nicht aktiv**, weder LAN noch WLAN. Das betrifft z. B.:
