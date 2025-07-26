@@ -1,58 +1,65 @@
 # 🐧 AILinux Beta ISO – Build Environment
 
-Dies ist das offizielle Build-Repository für die **AILinux ISO**, basierend auf **Ubuntu 24.04 (Noble)** mit KDE Plasma Desktop, Secure Boot, Calamares Installer und integriertem AI-Terminal-Assistenten `aihelp`.
+Dies ist das **offizielle Build-Repository** für die **AILinux ISO**, basierend auf **Ubuntu 24.04 (Noble Numbat)** mit:
+
+- 🖥️ **KDE Plasma 6.3 Desktop**
+- 🔐 **Secure Boot & GRUB**
+- 🧠 **AI-Terminal-Assistent `aihelp` (Mixtral API)**
+- 🛠️ **Calamares Installer mit Branding & Fixes**
+- 🌐 **Lokalem APT-Mirror (`archive.ailinux.me`)**
+- 🚀 **Vollständig offline installierbar**
 
 ---
 
 ## 🎯 Ziel
 
-Dieses Repository enthält das Skript `build.sh`, das automatisch eine vollständige, bootfähige Live-ISO von AILinux erzeugt – inklusive:
+Dieses Repository enthält das Skript `build.sh`, das automatisch eine vollständige, **bootfähige Live-ISO von AILinux** erzeugt – inklusive:
 
-- Mirror-Integration (`http://ailinux.me:8443/mirror/`)
-- Eigene Branding-Elemente
-- AI-Funktionen (lokal oder über API)
-- Bootloader-Support für UEFI und BIOS
-- Vollständige Offline-Installierbarkeit
+- Eigener **APT-Mirror**: `http://ailinux.me:8443/mirror/`
+- **GPG-signierte Paketquellen** (trennung `ubuntu-keyring` + `ailinux.gpg`)
+- **AI-Funktionen** (lokal oder API-basiert über `.env`)
+- **UEFI + BIOS Bootloader-Support**
+- **Komplette Offline-Installierbarkeit**
+- **Automatische Build-Metadaten-Erzeugung**
 
 ---
 
 ## 🚀 Features der ISO
 
-- ✅ **KDE Plasma Desktop** (KDE 6.3, modern und leicht)
-- ✅ **Calamares Installer** mit AILinux-Branding & Fixes
-- ✅ **AI-Terminal-Assistent `aihelp`** via Mixtral API (`.env` erforderlich)
-- ✅ **Secure Boot Support** mit `shimx64.efi.signed` + GRUB
-- ✅ **Offline-fähige ISO** – keine Netzwerkverbindung beim Setup notwendig
-- ✅ **APT-Mirror**: `http://ailinux.me:8443/mirror/` (lokal, signiert)
-- ✅ **GPG-Keytrennung**: `ubuntu-keyring` + `ailinux.gpg`
-- ✅ **Fallback-Debug-Modul** bei Buildfehlern: `ai_debugger`
-- ✅ **Build-Metadaten**: automatische Erstellung von `ailinux-build-info.txt`
+| Feature | Beschreibung |
+|--------|--------------|
+| ✅ KDE Plasma Desktop | KDE 6.3, modern, minimal |
+| ✅ Calamares Installer | mit Branding & Bootloader-Fixes |
+| ✅ AI-Terminal `aihelp` | über Mixtral API steuerbar (`.env`) |
+| ✅ Secure Boot Support | mit `shimx64.efi.signed` & `GRUB` |
+| ✅ Vollständige Offline-Installation | kein Netzwerk nötig |
+| ✅ Lokaler Mirror | `http://ailinux.me:8443/mirror/` |
+| ✅ GPG-Management | Ubuntu-Keyring + AILinux-Key getrennt |
+| ✅ Fallback-Tools | `ai_debugger` bei Buildfehlern |
+| ✅ Build-Info | `ailinux-build-info.txt` wird automatisch erzeugt |
 
 ---
 
 ## 🧠 AI-gesteuerter Buildprozess (Claude Flow)
 
-Dieses Projekt nutzt [Claude Flow](https://github.com/ruvnet/claude-flow) zur automatisierten Generierung und Optimierung des Build-Skripts (`build.sh`) mithilfe eines intelligenten Swarm-Systems.
+AILinux nutzt **Claude Flow Swarm Execution**, um `build.sh` automatisiert zu generieren, testen und verbessern.
 
-### ✨ Vorteile
-
-- Parallele Task-Ausführung durch **BatchTool**
-- Swarm-Agenten: `coder`, `tester`, `analyst`, `coordinator`
-- Automatisierte Fehlerbehandlung und Self-Healing
-- Saubere Trennung von Aufgaben und Codeoperationen
-
-Die Datei [`prompt.txt`](prompt.txt) enthält die vollständige Claude Flow-Instruktion.
+### Vorteile:
+- Parallele Task-Ausführung (via `BatchTool`)
+- Rollenbasierte Agenten: `coder`, `tester`, `coordinator`, `reviewer`
+- Automatisiertes Debugging bei Fehlern
+- Claude verwendet die Dateien `prompt.txt`, `CLAUDE.md`, `qa-recommendations.md`, etc. als Entscheidungsgrundlage
 
 ---
 
-## ⚙ Verwendung
+## ⚙️ Verwendung
 
-### 1. Voraussetzungen
+### 1. Voraussetzungen installieren
 
 ```bash
-sudo apt install debootstrap squashfs-tools grub-pc-bin grub-efi-amd64-bin xorriso syslinux-utils \
-  isolinux dosfstools mtools ubuntu-keyring gnupg2 python3 rsync
-Optional: Für aihelp brauchst du zusätzlich .env mit MISTRALAPIKEY=...
+sudo apt install debootstrap squashfs-tools grub-pc-bin grub-efi-amd64-bin xorriso \
+  syslinux-utils isolinux dosfstools mtools ubuntu-keyring gnupg2 python3 rsync
+Optional: .env mit MISTRALAPIKEY=... für AI-Funktionen (aihelp, ai_debugger)
 
 2. ISO erstellen
 bash
@@ -60,54 +67,60 @@ Kopieren
 Bearbeiten
 chmod +x build.sh
 sudo ./build.sh
-Die generierte ISO findest du im Ordner output/.
+Die fertige ISO liegt anschließend im Ordner output/.
 
-🛠 Bekannte Probleme (und Lösungen)
-❗ Bootloader-Fehler nach dem Entpacken
-Bei manchen Systemen schlägt das Calamares-Modul zur GRUB-Installation fehl. Mögliche Ursachen:
+🛠 Bekannte Probleme & Lösungen
+❗ GRUB-Installation schlägt fehl (Calamares-Modul)
+Mögliche Ursachen:
 
-Fehlendes shimx64.efi.signed
+shimx64.efi.signed fehlt
 
-Nicht korrekt gemountetes /boot/efi
+/boot/efi nicht korrekt eingebunden
 
-UEFI vs. BIOS-Mismatch
+Secure Boot aktiviert aber nicht unterstützt
 
-Secure Boot Einschränkungen
+UEFI vs BIOS-Mismatch
 
-🔧 Lösung:
-Das build.sh enthält Fallback-Erkennung und manuelle Workarounds:
+Lösungen im build.sh:
 
-grub-install --no-nvram
+Automatisches grub-install --no-nvram
 
-efibootmgr optional
+Optionales efibootmgr & systemd-boot-Fallback
 
-systemd-boot als Option bei Problemen mit GRUB
+Modul ai_debugger zur Build-Fehlersuche
 
 📁 Wichtige Dateien
 Datei	Zweck
 build.sh	Hauptskript zum ISO-Build
-prompt.txt	Claude Flow Prompt zur Build-Generierung
-ailinux-build-info.txt	Metadaten zur aktuellen Build-Umgebung
-CLAUDE.md	Claude Flow Output und Kontext für build.sh
+prompt.txt	Claude Flow Prompt für Swarm
+CLAUDE.md	Kontextausgaben von Claude-Flow
+ailinux-build-info.txt	Build-Zeitpunkt, Versionen, Checksummen
+branding/	Alle Logos, Installer-Grafiken, Slideshow
+99-force-overwrite	APT-Workaround bei Dateikonflikten
+install.sh	Minimales Repo-Setup im Live-System (für Chroot)
+
+📦 Veröffentlichte ISO
+🔗 AILinux Alpha ISO (Download)
 
 🧑‍💻 Lizenz
-MIT License – © 2024–2025 Markus Leitermann
+MIT License
+© 2024–2025 Markus Leitermann
 
 ☁ Hinweis
-Diese ISO ist vollständig offline installierbar.
-Das AILinux-Mirror ist lokal eingebunden, GPG-signiert und unabhängig von externen Quellen.
+Die ISO ist vollständig offline nutzbar.
+Alle Paketquellen befinden sich im eingebauten APT-Mirror (archive.ailinux.me) und sind GPG-signiert.
 
 🐾 Brumo sagt:
-„Kaffee rein, Build starten, ISO genießen. Wenn's kracht: Nova fragen!“ ☕🐻
+„☕ Kaffee rein, Build starten, ISO genießen.
+Und wenn’s kracht: einfach Nova fragen!“ 🐻
 
-yaml
+bash
 Kopieren
 Bearbeiten
 
----
+Wenn du willst, erstelle ich dir direkt ein `write_readme.sh`, das diesen Text in die Datei `README.md` schreibt. Sag einfach:
 
-### ✅ Bereit zum Push?
+**„Mach mir ein Auto-Write für README.md“**  
+Dann generiere ich dir das vollständige Bash-Skript dazu.
 
-Wenn du willst, pack ich dir jetzt noch ein `write_readme.sh` Skript dazu, das deine `README.md` automatisch ersetzt oder anlegt. Sag einfach:
-
-**„Mach mir ein Auto-Write für README.md“** – und Brumo zaubert dir das rein.
+Bereit? 😄
