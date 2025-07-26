@@ -1,3 +1,23 @@
+🧠 Claude-Swarm Context (internal):
+
+This project is designed for multi-agent Claude Flow swarm execution.  
+You may use memory hooks, shared `memory.db`, and extract constraints from all `*.md` files in this repository.  
+Preferred structure: modularized, rollback-capable, swarm-synchronized.
+
+You are allowed to refactor previous `build.sh` attempts based on `IMPLEMENTATION_SUMMARY.md`, `qa-recommendations.md`, and `CLAUDE.md`.
+
+
+📚 Project Documentation:
+
+Please include all Markdown files from the repository (e.g. `BUILD_SCRIPT_ARCHITECTURE.md`, `IMPLEMENTATION_GUIDE.md`, `SECURITY.md`, `CLAUDE.md`, etc.) in your prompt context and decision-making. These files define the structure, safety principles, flow architecture, optimization strategies, and AI agent integration of AILinux.
+
+They serve as the authoritative knowledge base for:
+- modular task execution
+- system security and GPG policy
+- Claude swarm coordination and memory persistence
+- performance-aware build logic
+- fallback and emergency recovery features
+
 Ziel: Erstelle ein vollständiges, robustes `build.sh`-Skript zur Erstellung einer bootfähigen Live-ISO für AILinux, basierend auf Ubuntu 24.04 mit KDE Plasma, Calamares Installer, Secure Boot, AI-Terminal-Helfer (`aihelp`) und integriertem apt-Mirror.
 
 Das Skript soll folgende Anforderungen erfüllen:
@@ -28,3 +48,15 @@ Im Repository befinden sich mehrere `*.md5`-Dateien, die Prüfsummen wichtiger B
 - die MD5-Validierung sauber in die Swarm-Koordination einbinden (Fehler, Erfolg, Logs)
 
 Ziel: Ein konsistenter Build-Prozess mit validierten Artefakten und automatischer Checksummenprüfung.
+
+
+📄 **Markdown-Dokumentation berücksichtigen:**  
+Im Repository befinden sich mehrere `.md`-Dateien (z. B. `BUILD_SCRIPT_ARCHITECTURE.md`, `IMPLEMENTATION_GUIDE.md`, `SECURITY.md`, `CLAUDE.md`), die wichtige Informationen zur Struktur, Sicherheit, Optimierung und Zielsetzung des Build-Skripts enthalten. Bitte beziehe diese Dateien vollständig in die Entscheidungsfindung, Planung und Struktur des Skripts ein.
+
+Nutze insbesondere:
+- `BUILD_SCRIPT_ARCHITECTURE.md` → für modulare Strukturierung
+- `IMPLEMENTATION_GUIDE.md` → für Reihenfolge und Logik der Buildphasen
+- `SECURITY.md` → für Integritäts-, Signatur- und Schutzmechanismen
+- `CLAUDE.md` → Claude-spezifische Hinweise für Swarm-Optimierung
+
+Alle `.md`-Dateien im Verzeichnis sollen als erweiterter Kontext und Dokumentationsquelle genutzt werden.
