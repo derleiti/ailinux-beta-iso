@@ -1,41 +1,30 @@
-🧭 Aufgabe:
-Analysiere das Repository https://github.com/derleiti/ailinux-beta-iso **inkl. README.md, prompt.txt und build.sh**.
+Ziel: Erstelle ein vollständiges, robustes `build.sh`-Skript zur Erstellung einer bootfähigen Live-ISO für AILinux, basierend auf Ubuntu 24.04 mit KDE Plasma, Calamares Installer, Secure Boot, AI-Terminal-Helfer (`aihelp`) und integriertem apt-Mirror.
 
-🎯 Ziel:
-Erzeuge ein vollständiges, robustes und produktionsreifes `build.sh`-Skript zur Erstellung einer AILinux Live-ISO (Ubuntu 24.04 'noble') mit folgenden Features:
+Das Skript soll folgende Anforderungen erfüllen:
 
-- KDE Plasma Desktop + Calamares Installer (inkl. Branding)
-- AI-Terminal-Assistent 'aihelp' mit Mixtral-API (.env erforderlich)
-- Secure Boot Support (shimx64.efi.signed etc.)
-- Vollständige apt-mirror Integration: http://ailinux.me:8443/mirror/
-- Trennung Ubuntu vs. AILinux GPG Keys (ubuntu-keyring vs. ailinux.gpg)
-- Fallback-Analyse bei Build-Fehlern (z. B. via ai_debugger)
-- Erstellung von `ailinux-build-info.txt` mit Metadaten
-- Mount/Unmount-Sicherheit im chroot, force-overwrite-Fix
-- Keine sequentielle Logik – BatchTool und parallele Operationen bevorzugt
+1. **KDE 6.3 Desktop-Umgebung** mit minimalem Setup  
+2. **Calamares Installer** mit Branding und funktionierendem Bootloader (UEFI + BIOS)  
+3. **Secure Boot Support** (shimx64.efi.signed)  
+4. **AILinux Mirror-Integration** (`archive.ailinux.me`)  
+5. **AI-Integration über Mixtral/OpenAI API** über `/opt/ailinux/aihelp`  
+6. **GPG-Signatur des Repos** mit eigenem Keyring  
+7. **Fehlerrobustes Mount-/Unmount-Handling**  
+8. **Funktionierender Live-Boot, Offline-Verwendung**  
+9. **Verzeichnisstruktur wie im GitHub-Repo `https://github.com/derleiti/ailinux-beta-iso`**  
 
-🚨 Wichtige Claude Flow Regeln:
-- Verwende ausschließlich **BatchTool**: Alle FileOps, Tasks, Todos in EINEM Message
-- **Spawn ALL agents gleichzeitig**, z. B. (coder, tester, analyst, coordinator)
-- Nutze `hooks pre-task`, `post-edit`, `post-task` für jede Dateioperation
-- Jede Änderung an `build.sh` muss in **einem Write-Call** erfolgen
-- Keine sequentielle Task-Verarbeitung – alles parallel
+⚠ **Aktueller Bug:**  
+Das `build.sh`-Skript loggt den Benutzer während der Ausführung *aus* (vermutlich durch Neustart von Systemdiensten, chroot-Probleme oder aggressive Bereinigung). Bitte identifiziere und behebe die Ursache, sodass das Skript zuverlässig im Terminal durchläuft, ohne dass die Session beendet wird.
 
-📎 Ausgangspunkt:
-Nutze die bestehende build.sh im Repo als Baseline und verbessere sie gemäß obigen Anforderungen. Analysiere prompt.txt & README.md für zusätzliche Kontextdaten.
+Verwende best practices für bash scripting, Logging und Fehlerbehandlung. Die Ausgabe soll auch remote per SSH nutzbar sein.
 
-📁 Dateiname:
-Die neue Datei soll als `build.sh` generiert und direkt ausführbar sein.
+Nutze nötige Kommentare und prüfe, ob `set -eo pipefail` ggf. zu aggressiv ist.
 
-🛠 Fehlerbehebung: Bootloader-Skriptproblem beim Installieren
+➕ **Erweiterung – Prüfsummen berücksichtigen:**  
+Im Repository befinden sich mehrere `*.md5`-Dateien, die Prüfsummen wichtiger Build-Artefakte (z. B. ISO, EFI-Dateien, Kernel-Module) enthalten. Das Skript soll:
 
-Im aktuellen AILinux-ISO schlägt die Calamares-Installation nach dem Entpacken der Systemdateien fehl. Ursache ist ein Python-Skript im Bootloader-Modul, vermutlich beim Aufruf von `grub-install` oder bei Secure-Boot-Komponenten.
+- beim Erstellen neuer Dateien automatisch prüfen, ob eine passende `.md5` existiert  
+- bei Abweichungen optional eine neue `.md5` erzeugen  
+- einen optionalen Hook wie `validate-md5.sh` nutzen, um vor dem finalen ISO-Schritt alle relevanten Checksummen zu verifizieren  
+- die MD5-Validierung sauber in die Swarm-Koordination einbinden (Fehler, Erfolg, Logs)
 
-Bitte implementiere im neuen `build.sh` oder im Calamares-Kontext folgende Maßnahmen:
-
-- Eine **Fallback-Erkennung**, falls `shimx64.efi.signed`, `grub-install`, `efibootmgr` oder `/boot/efi` fehlen
-- Einen robusten **Fix für das Bootloader-Modul**, z. B. durch:
-  - manuelle Ausführung von `grub-install` in der chroot-Umgebung mit `--no-nvram`
-  - Prüfung, ob `/sys/firmware/efi` verfügbar ist
-  - Optionale Integration von `systemd-boot` als Alternativlösung bei UEFI-Systemen
-- Ziel: Der Calamares-Installer darf nach dem Entpacken nicht mehr durch das Bootloader-Modul fehlschlagen. Der Fix soll so generisch wie möglich, aber AILinux-spezifisch angepasst sein.
+Ziel: Ein konsistenter Build-Prozess mit validierten Artefakten und automatischer Checksummenprüfung.
