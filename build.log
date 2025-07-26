@@ -1,0 +1,40 @@
+[0;32m[INFO][0m 2025-07-26 05:25:21 - Loading environment variables from .env
+[0;32m[INFO][0m 2025-07-26 05:25:21 - Starting AILinux ISO build process
+
+[0;34m[1m==== Step 1: Environment Setup and Validation ====[0m
+
+[0;32m[INFO][0m 2025-07-26 05:25:21 - Validating system requirements
+[0;31m[ERROR][0m 2025-07-26 05:25:21 - This script must be run as root
+[0;32m[INFO][0m 2025-07-26 05:25:21 - Executing cleanup functions...
+[0;32m[INFO][0m 2025-07-26 05:25:21 - Cleanup completed
+[0;32m[INFO][0m 2025-07-26 05:31:13 - Loading environment variables from .env
+[0;32m[INFO][0m 2025-07-26 05:31:13 - Starting AILinux ISO build process
+
+[0;34m[1m==== Step 1: Environment Setup and Validation ====[0m
+
+[0;32m[INFO][0m 2025-07-26 05:31:13 - Validating system requirements
+[0;31m[ERROR][0m 2025-07-26 05:31:13 - This script must be run as root
+[0;32m[INFO][0m 2025-07-26 05:31:13 - Executing cleanup functions...
+[0;32m[INFO][0m 2025-07-26 05:31:13 - Cleanup completed
+[0;32m[INFO][0m 2025-07-26 05:32:10 - Loading environment variables from .env
+[0;32m[INFO][0m 2025-07-26 05:32:10 - Starting AILinux ISO build process
+
+[0;34m[1m==== Step 1: Environment Setup and Validation ====[0m
+
+[0;32m[INFO][0m 2025-07-26 05:32:10 - Validating system requirements
+[0;31m[ERROR][0m 2025-07-26 05:32:10 - This script must be run as root
+[0;32m[INFO][0m 2025-07-26 05:32:10 - Executing cleanup functions...
+[0;32m[INFO][0m 2025-07-26 05:32:10 - Cleanup completed
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Loading environment variables from .env
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Starting AILinux ISO build process
+
+[0;34m[1m==== Step 1: Environment Setup and Validation ====[0m
+
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Validating system requirements
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Mixtral API key detected - AI debugging will be available
+[0;32m[INFO][0m 2025-07-26 05:32:22 - System requirements validation completed
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Setting up GPG keys for repository verification
+[0;32m[INFO][0m 2025-07-26 05:32:22 - Importing AILinux GPG key: A1945EE6DA93CB05
+[0;33m[WARN][0m 2025-07-26 05:32:24 - Failed to import AILinux GPG key from keyserver, trying alternative method
+[0;33m[WARN][0m 2025-07-26 05:32:24 - AILinux GPG key not available - continuing without custom repository verification
+[0;32m[INFO][0m 2025-07-26 05:32:24 - Creating work directories

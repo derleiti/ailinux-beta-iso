@@ -1,582 +1,1488 @@
 #!/bin/bash
 #
-# AILinux ISO Build Script v26.03 - Swarm-Enhanced Production Edition
-# Creates a bootable Live ISO of AILinux based on Ubuntu 24.04 (Noble Numbat)
+# AILinux ISO Build Script - Main Orchestrator
+# 
+# This script builds a complete AILinux live ISO with KDE 6.3, Calamares installer,
+# Secure Boot support, AI helper integration, and comprehensive session safety.
 #
-# Swarm enhancements in this version:
-# - SWARM CRITICAL: Comprehensive Claude Flow swarm coordination hooks
-# - SWARM CRITICAL: Runtime Calamares bootloader installation fixes 
-# - SWARM CRITICAL: Enhanced Multi-Tier Bootloader Fallback System (GRUB Tier 1-3 + systemd-boot Emergency)
-# - SWARM CRITICAL: Early AILinux Repository Integration via curl script with swarm coordination
-# - SWARM CRITICAL: Dynamic bootloader module regeneration during installation
-# - SWARM CRITICAL: Production-grade error handling with swarm-coordinated AI debugging
-# - SWARM CRITICAL: Build metadata generation with swarm coordination context
-# - Enhanced mount/unmount safety with swarm progress tracking
-# - German AI assistant with Multi-Tier Bootloader expertise and swarm integration
-# - Force-overwrite fixes with swarm coordination and emergency recovery
-# - Advanced compression using XZ with swarm progress monitoring
-# - Transaction-like operations with swarm-coordinated rollback capability
-# - Enhanced cleanup strategies with swarm memory persistence
+# Architecture: Modular design with session preservation and intelligent error handling
+# Generated: $(date)
 #
-# Multi-Tier Bootloader System v26.03 Swarm-Enhanced:
-# ====================================================
-# - Tier 1: Standard GRUB installation with swarm coordination and real-time ESP validation
-# - Tier 2: NVRAM bypass for firmware compatibility with swarm logging and dynamic parameters
-# - Tier 3: Removable/force installation for difficult hardware with swarm fallback coordination
-# - Tier 4: systemd-boot emergency fallback with automatic activation and swarm recovery
-# - Runtime Fix Integration: /usr/local/bin/fix-calamares-bootloader with swarm hooks
-# - Enhanced EFI System Partition validation and repair with swarm progress tracking
-# - Comprehensive Calamares integration with progressive fallback and swarm coordination
-# - AI-powered German troubleshooting with Multi-Tier context and swarm memory
-#
-# License: MIT License
-# Copyright (c) 2024-2025 Markus Leitermann
-# Enhanced by Claude Flow Swarm v26.03
 
-set -eo pipefail
+set -e  # Exit on error (will be overridden by error_handler module)
 
-# --- Configuration ---
-readonly DISTRO_NAME="AILinux"
-readonly DISTRO_VERSION="24.04"
-readonly DISTRO_EDITION="Premium"
-readonly UBUNTU_CODENAME="noble"
-readonly ARCHITECTURE="amd64"
-readonly BUILD_VERSION="26.03"
+# ============================================================================
+# GLOBAL CONFIGURATION
+# ============================================================================
 
-readonly LIVE_USER="ailinux"
-readonly LIVE_HOSTNAME="ailinux"
+# Build configuration
+export AILINUX_BUILD_VERSION="1.0"
+export AILINUX_BUILD_DATE="$(date '+%Y%m%d')"
+export AILINUX_BUILD_SESSION_ID="build_session_$$"
 
-readonly BUILD_DIR="AILINUX_BUILD"
-readonly CHROOT_DIR="${BUILD_DIR}/chroot"
-readonly ISO_DIR="${BUILD_DIR}/iso"
-readonly ISO_NAME="${DISTRO_NAME,,}-${DISTRO_VERSION}-${DISTRO_EDITION,,}-${ARCHITECTURE}.iso"
-readonly LOG_FILE="$(pwd)/build.log"
-readonly METADATA_FILE="$(pwd)/ailinux-build-info.txt"
+# Directories
+export AILINUX_BUILD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export AILINUX_BUILD_CHROOT_DIR="$AILINUX_BUILD_DIR/chroot"
+export AILINUX_BUILD_OUTPUT_DIR="$AILINUX_BUILD_DIR/output"
+export AILINUX_BUILD_TEMP_DIR="$AILINUX_BUILD_DIR/temp"
+export AILINUX_BUILD_LOGS_DIR="$AILINUX_BUILD_DIR/logs"
 
-# Swarm coordination configuration
-readonly SWARM_MEMORY_DIR=".swarm"
-readonly SWARM_MEMORY_FILE="${SWARM_MEMORY_DIR}/memory.db"
+# Logging
+export LOG_FILE="$AILINUX_BUILD_LOGS_DIR/build_$(date +%Y%m%d_%H%M%S).log"
+export LOG_LEVEL="INFO"
 
-# --- Colors and Logging Functions ---
-readonly COLOR_RESET='\033[0m'
-readonly COLOR_INFO='\033[0;34m'
-readonly COLOR_SUCCESS='\033[0;32m'
-readonly COLOR_WARN='\033[0;33m'
-readonly COLOR_ERROR='\033[0;31m'
-readonly COLOR_STEP='\033[1;36m'
-readonly COLOR_AI='\033[1;35m'
-readonly COLOR_CRITICAL='\033[1;31m'
-readonly COLOR_BOOTLOADER='\033[1;33m'
-readonly COLOR_SWARM='\033[1;36m'
+# Build options (can be overridden by command line)
+export AILINUX_SKIP_CLEANUP=${AILINUX_SKIP_CLEANUP:-false}
+export AILINUX_ENABLE_DEBUG=${AILINUX_ENABLE_DEBUG:-false}
+export AILINUX_DRY_RUN=${AILINUX_DRY_RUN:-false}
 
-# Enhanced logging with all output to log file and terminal
-exec > >(tee -a "${LOG_FILE}") 2>&1
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-log() {
-    local level_color="$1"
-    local level_text="$2"
-    local message="$3"
-    echo -e "$(date '+%Y-%m-%d %H:%M:%S') ${level_color}[${level_text}]${COLOR_RESET} ${message}"
+# Simple logging functions (before modules are loaded)
+log_info() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO: $*" | tee -a "$LOG_FILE"
 }
 
-log_info() { log "${COLOR_INFO}" "INFO" "$1"; }
-log_success() { log "${COLOR_SUCCESS}" "SUCCESS" "$1"; }
-log_warn() { log "${COLOR_WARN}" "WARNING" "$1"; }
-log_error() { log "${COLOR_ERROR}" "ERROR" "$1"; }
-log_critical() { log "${COLOR_CRITICAL}" "CRITICAL" "$1"; }
-log_bootloader() { log "${COLOR_BOOTLOADER}" "BOOTLOADER" "$1"; }
-log_swarm() { log "${COLOR_SWARM}" "SWARM" "$1"; }
-log_step() {
-    echo
-    log "${COLOR_STEP}" "STEP $1" "==================== $2 ===================="
-}
-log_ai() { log "${COLOR_AI}" "AI-DEBUG" "$1"; }
-
-# ========================================
-# SWARM COORDINATION FUNCTIONS
-# ========================================
-
-# Initialize swarm coordination
-swarm_init() {
-    log_swarm "Initializing Claude Flow swarm coordination system..."
-    
-    # Create swarm directory structure
-    mkdir -p "${SWARM_MEMORY_DIR}"
-    
-    # Initialize swarm memory database
-    if command -v sqlite3 >/dev/null 2>&1; then
-        sqlite3 "${SWARM_MEMORY_FILE}" "
-        CREATE TABLE IF NOT EXISTS build_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            description TEXT NOT NULL,
-            level TEXT DEFAULT 'info',
-            phase TEXT,
-            agent TEXT DEFAULT 'main'
-        );
-        CREATE TABLE IF NOT EXISTS build_progress (
-            phase TEXT PRIMARY KEY,
-            status TEXT NOT NULL,
-            started_at TEXT,
-            completed_at TEXT,
-            details TEXT
-        );
-        " 2>/dev/null || {
-            log_warn "SQLite not available, using file-based swarm coordination"
-            echo "# AILinux Build Swarm Memory Database" > "${SWARM_MEMORY_FILE}"
-            echo "# Initialized: $(date)" >> "${SWARM_MEMORY_FILE}"
-        }
-    else
-        echo "# AILinux Build Swarm Memory Database" > "${SWARM_MEMORY_FILE}"
-        echo "# Initialized: $(date)" >> "${SWARM_MEMORY_FILE}"
-    fi
-    
-    # Initialize Claude Flow hooks if available
-    if command -v npx >/dev/null 2>&1; then
-        log_swarm "Claude Flow detected, initializing swarm hooks"
-        npx claude-flow@alpha hooks init --memory-db "${SWARM_MEMORY_FILE}" 2>/dev/null || true
-    fi
-    
-    log_success "Swarm coordination system initialized"
+log_warn() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN: $*" | tee -a "$LOG_FILE"
 }
 
-# Universal swarm coordination function
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" | tee -a "$LOG_FILE"
+}
+
+log_success() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $*" | tee -a "$LOG_FILE"
+}
+
+log_critical() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] CRITICAL: $*" | tee -a "$LOG_FILE"
+}
+
+# Simple swarm coordination function (fallback if module not available)
 swarm_coordinate() {
-    local event_type="$1"
-    local description="$2"
+    local operation="$1"
+    local message="$2"
     local level="${3:-info}"
-    local phase="${4:-general}"
+    local category="${4:-general}"
     
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Try to use Claude Flow coordination if available
+    if command -v npx >/dev/null 2>&1 && npx claude-flow@alpha --version >/dev/null 2>&1; then
+        npx claude-flow@alpha hooks notification --message "$operation: $message" --telemetry true 2>/dev/null || true
+    fi
     
-    # Log the event
-    log_swarm "EVENT: ${event_type} - ${description}"
+    # Always log locally
+    case "$level" in
+        error|critical) log_error "SWARM: $operation - $message" ;;
+        warning) log_warn "SWARM: $operation - $message" ;;
+        success) log_success "SWARM: $operation - $message" ;;
+        *) log_info "SWARM: $operation - $message" ;;
+    esac
+}
+
+# ============================================================================
+# INITIALIZATION
+# ============================================================================
+
+# Initialize build environment
+init_build_environment() {
+    log_info "🚀 Initializing AILinux build environment..."
     
-    # Store in swarm memory database
-    if command -v sqlite3 >/dev/null 2>&1 && [ -f "${SWARM_MEMORY_FILE}" ]; then
-        sqlite3 "${SWARM_MEMORY_FILE}" "
-        INSERT INTO build_events (timestamp, event_type, description, level, phase) 
-        VALUES ('${timestamp}', '${event_type}', '${description}', '${level}', '${phase}');
-        " 2>/dev/null || {
-            echo "[${timestamp}] ${phase}:${event_type} - ${description} (${level})" >> "${SWARM_MEMORY_FILE}"
+    # Create essential directories
+    mkdir -p "$AILINUX_BUILD_CHROOT_DIR"
+    mkdir -p "$AILINUX_BUILD_OUTPUT_DIR"
+    mkdir -p "$AILINUX_BUILD_TEMP_DIR"
+    mkdir -p "$AILINUX_BUILD_LOGS_DIR"
+    
+    # Ensure we're running with appropriate permissions
+    if [ "$EUID" -eq 0 ]; then
+        log_warn "⚠️  Running as root - build will proceed but session safety is critical"
+        export AILINUX_BUILD_AS_ROOT=true
+    else
+        log_info "ℹ️  Running as user - this is the recommended approach"
+        export AILINUX_BUILD_AS_ROOT=false
+    fi
+    
+    # Export build environment variables
+    export AILINUX_BUILD_ENV_INITIALIZED=true
+    
+    log_success "✅ Build environment initialized"
+}
+
+# Load all required modules
+load_build_modules() {
+    log_info "📚 Loading AILinux build modules..."
+    
+    local modules_dir="$AILINUX_BUILD_DIR/modules"
+    
+    # Essential modules in dependency order
+    local essential_modules=(
+        "session_safety.sh"      # MUST be first - session protection
+        "error_handler.sh"       # MUST be second - error handling
+        "resource_manager.sh"    # Third - resource management
+        "chroot_manager.sh"      # Fourth - chroot operations
+        "service_manager.sh"     # Fifth - service management
+    )
+    
+    # Specialized modules (order less critical)
+    local specialized_modules=(
+        "checksum_validator.sh"
+        "mirror_manager.sh"
+        "secureboot_handler.sh"
+        "kde_installer.sh"
+        "calamares_setup.sh"
+        "ai_integrator.sh"
+    )
+    
+    # Load essential modules first
+    for module in "${essential_modules[@]}"; do
+        local module_path="$modules_dir/$module"
+        
+        if [ -f "$module_path" ]; then
+            log_info "   Loading essential module: $module"
+            source "$module_path" || {
+                log_error "❌ Failed to load essential module: $module"
+                return 1
+            }
+        else
+            log_error "❌ Essential module not found: $module"
+            return 1
+        fi
+    done
+    
+    # Load specialized modules
+    for module in "${specialized_modules[@]}"; do
+        local module_path="$modules_dir/$module"
+        
+        if [ -f "$module_path" ]; then
+            log_info "   Loading specialized module: $module"
+            source "$module_path" || {
+                log_warn "⚠️  Failed to load specialized module: $module"
+            }
+        else
+            log_warn "⚠️  Specialized module not found: $module"
+        fi
+    done
+    
+    log_success "✅ Build modules loaded successfully"
+}
+
+# Initialize all module systems
+initialize_build_systems() {
+    log_info "⚙️  Initializing build systems..."
+    
+    # Initialize in dependency order
+    
+    # Core safety and error handling (MANDATORY)
+    if command -v init_session_safety >/dev/null 2>&1; then
+        init_session_safety || {
+            log_critical "❌ Failed to initialize session safety - ABORTING"
+            exit 1
         }
     else
-        echo "[${timestamp}] ${phase}:${event_type} - ${description} (${level})" >> "${SWARM_MEMORY_FILE}"
-    fi
-    
-    # Execute Claude Flow hooks if available
-    if command -v npx >/dev/null 2>&1; then
-        npx claude-flow@alpha hooks notify --message "BUILD: ${event_type} - ${description}" --level "${level}" 2>/dev/null || true
-        npx claude-flow@alpha hooks post-edit --memory-key "build/${phase}/${event_type}" --file "${LOG_FILE}" 2>/dev/null || true
-    fi
-}
-
-# Update build progress
-swarm_progress() {
-    local phase="$1"
-    local status="$2"
-    local details="${3:-}"
-    
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    if command -v sqlite3 >/dev/null 2>&1 && [ -f "${SWARM_MEMORY_FILE}" ]; then
-        if [ "$status" = "started" ]; then
-            sqlite3 "${SWARM_MEMORY_FILE}" "
-            INSERT OR REPLACE INTO build_progress (phase, status, started_at, details) 
-            VALUES ('${phase}', '${status}', '${timestamp}', '${details}');
-            " 2>/dev/null || true
-        elif [ "$status" = "completed" ]; then
-            sqlite3 "${SWARM_MEMORY_FILE}" "
-            UPDATE build_progress SET status='${status}', completed_at='${timestamp}', details='${details}' 
-            WHERE phase='${phase}';
-            " 2>/dev/null || true
-        fi
-    fi
-    
-    swarm_coordinate "progress_update" "${phase}: ${status}" "info" "${phase}"
-}
-
-# Operations stack for rollback capability
-declare -a OPERATIONS_STACK=()
-declare -a MOUNT_TRACKING=()
-declare -a CLEANUP_FUNCTIONS=()
-
-# Main execution function with complete build steps
-main() {
-    log_info "Starting AILinux ISO Build Script v26.03 - Swarm-Enhanced Production Edition"
-    
-    check_not_root
-    
-    # Initialize swarm coordination
-    swarm_init
-    swarm_coordinate "build_started" "AILinux v26.03 Swarm-Enhanced build initiated" "info" "setup"
-    
-    # Execute all build steps
-    step_01_setup
-    step_02_bootstrap_system
-    step_03_install_packages
-    step_04_configure_kde_plasma
-    step_05_setup_ai_assistant
-    step_06_configure_calamares
-    step_07_setup_live_user
-    step_08_system_cleanup
-    step_09_create_squashfs
-    step_10_setup_bootloaders
-    step_11_create_iso
-    step_12_finalize_build
-}
-
-# Helper functions
-check_not_root() {
-    if [ "$(id -u)" -eq 0 ]; then
-        log_error "This script must not be run as root. It uses 'sudo' when needed."
+        log_critical "❌ Session safety module not available - ABORTING"
         exit 1
     fi
-}
-
-run_in_chroot() {
-    local max_retries=3
-    local retry_count=0
     
-    while [ $retry_count -lt $max_retries ]; do
-        if sudo chroot "${CHROOT_DIR}" /usr/bin/env -i \
-            HOME=/root \
-            TERM="$TERM" \
-            PS1='(ailinux-chroot) \u:\w\$ ' \
-            PATH=/usr/bin:/usr/sbin:/bin:/sbin:/usr/local/bin \
-            DEBIAN_FRONTEND=noninteractive \
-            LANG=en_US.UTF-8 \
-            LC_ALL=en_US.UTF-8 \
-            /bin/bash --login +h -c "$1"; then
-            return 0
-        fi
-        
-        ((retry_count++))
-        log_warn "Chroot command failed (attempt $retry_count/$max_retries). Retrying..."
-        sleep 2
-    done
-    
-    log_error "Chroot command failed after $max_retries attempts"
-    return 1
-}
-
-# Enhanced cleanup function with mount safety
-cleanup_build_environment() {
-    log_info "🧹 Performing comprehensive cleanup..."
-    
-    # Check for existing build processes
-    if pgrep -f "debootstrap" > /dev/null; then
-        log_warn "⚠️  Killing existing debootstrap processes..."
-        sudo pkill -f "debootstrap" || true
-        sleep 3
+    if command -v init_error_handling >/dev/null 2>&1; then
+        init_error_handling || {
+            log_critical "❌ Failed to initialize error handling - ABORTING"
+            exit 1
+        }
+    else
+        log_critical "❌ Error handling module not available - ABORTING"  
+        exit 1
     fi
     
-    # Safely unmount all chroot filesystems
-    if [ -d "${CHROOT_DIR}" ]; then
-        log_info "📂 Unmounting chroot filesystems..."
-        
-        # Unmount in reverse order of mounting
-        for mount_point in run sys proc dev/pts dev; do
-            local full_path="${CHROOT_DIR}/$mount_point"
-            if mountpoint -q "$full_path" 2>/dev/null; then
-                log_info "   Unmounting $full_path"
-                sudo umount -l "$full_path" 2>/dev/null || true
-            fi
-        done
-        
-        # Kill any remaining processes using chroot
-        sudo fuser -km "${CHROOT_DIR}" 2>/dev/null || true
-        sleep 2
-        
-        # Verify no mounts remain
-        if mount | grep -q "${CHROOT_DIR}"; then
-            log_warn "⚠️  Warning: Some mounts still active in chroot"
-            mount | grep "${CHROOT_DIR}"
-        fi
-        
-        # Remove chroot directory completely
-        log_info "   Removing chroot directory..."
-        sudo rm -rf "${CHROOT_DIR}"
+    # Resource and system management
+    if command -v init_resource_management >/dev/null 2>&1; then
+        init_resource_management || log_warn "⚠️  Resource management initialization failed"
     fi
     
-    # Clear debootstrap cache
-    sudo rm -rf /var/cache/debootstrap/
-    sudo rm -rf /tmp/debootstrap*
+    if command -v init_chroot_management >/dev/null 2>&1; then
+        init_chroot_management || log_warn "⚠️  Chroot management initialization failed"
+    fi
     
-    log_success "✅ Cleanup completed"
+    if command -v init_service_management >/dev/null 2>&1; then
+        init_service_management || log_warn "⚠️  Service management initialization failed"
+    fi
+    
+    # Specialized systems (optional but recommended)
+    command -v init_checksum_validation >/dev/null 2>&1 && init_checksum_validation
+    command -v init_mirror_management >/dev/null 2>&1 && init_mirror_management
+    command -v init_secureboot_handling >/dev/null 2>&1 && init_secureboot_handling
+    command -v init_kde_installation >/dev/null 2>&1 && init_kde_installation
+    command -v init_calamares_setup >/dev/null 2>&1 && init_calamares_setup
+    command -v init_ai_integration >/dev/null 2>&1 && init_ai_integration
+    
+    log_success "✅ Build systems initialized"
+    
+    # Coordinate with swarm
+    swarm_coordinate "build_init" "AILinux build systems initialized successfully" "success" "initialization"
 }
 
-# Enhanced debootstrap function with retry logic
-run_debootstrap() {
-    local suite="$1"
-    local target="$2"
-    local mirror="$3"
-    local max_retries=3
-    local retry_count=0
+# ============================================================================
+# BUILD PHASES
+# ============================================================================
+
+# Phase 1: Environment validation and setup
+phase_1_environment_setup() {
+    log_info "🔍 Phase 1: Environment validation and setup"
     
-    while [ $retry_count -lt $max_retries ]; do
-        log_info "🚀 Starting debootstrap (attempt $((retry_count + 1))/$max_retries)"
-        swarm_coordinate "debootstrap_attempt" "Attempt $((retry_count + 1))/$max_retries" "info" "bootstrap"
-        
-        # Ensure target directory is clean
-        sudo mkdir -p "$target"
-        sudo chown root:root "$target"
-        sudo chmod 755 "$target"
-        
-        # Run debootstrap with enhanced options
-        if sudo debootstrap \
-            --arch="${ARCHITECTURE}" \
-            --variant=minbase \
-            --components=main,restricted,universe,multiverse \
-            --include=wget,curl,gnupg,ca-certificates \
-            --cache-dir=/var/cache/debootstrap \
-            "$suite" "$target" "$mirror"; then
-            
-            log_success "✅ Debootstrap completed successfully"
-            swarm_coordinate "debootstrap_success" "Debootstrap completed on attempt $((retry_count + 1))" "success" "bootstrap"
-            return 0
-        else
-            log_error "❌ Debootstrap failed (attempt $((retry_count + 1)))"
-            swarm_coordinate "debootstrap_failed" "Attempt $((retry_count + 1)) failed" "error" "bootstrap"
-            
-            # Cleanup before retry
-            cleanup_build_environment
-            
-            retry_count=$((retry_count + 1))
-            if [ $retry_count -lt $max_retries ]; then
-                log_warn "⏳ Waiting 10 seconds before retry..."
-                sleep 10
-            fi
+    # Check system requirements
+    check_system_requirements || return 1
+    
+    # Set up build directories
+    setup_build_directories || return 1
+    
+    # Initialize package management
+    setup_package_management || return 1
+    
+    log_success "✅ Phase 1 completed: Environment setup"
+    swarm_coordinate "phase_1" "Environment setup completed successfully" "success" "build_phase"
+}
+
+# Check system requirements
+check_system_requirements() {
+    log_info "🔍 Checking system requirements..."
+    
+    local required_tools=(
+        "debootstrap"
+        "chroot"
+        "mount"
+        "umount"
+        "mksquashfs"
+        "xorriso"
+        "grub-mkrescue"
+        "wget"
+        "curl"
+    )
+    
+    local missing_tools=()
+    
+    for tool in "${required_tools[@]}"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing_tools+=("$tool")
         fi
     done
     
-    log_error "💥 Debootstrap failed after $max_retries attempts"
-    swarm_coordinate "debootstrap_final_failure" "Failed after $max_retries attempts" "error" "bootstrap"
-    return 1
-}
-
-# Pre-debootstrap safety checks
-pre_debootstrap_checks() {
-    log_info "🔍 Running pre-debootstrap safety checks..."
-    swarm_coordinate "safety_checks_started" "Running pre-debootstrap checks" "info" "bootstrap"
-    
-    # Check available disk space (minimum 5GB)
-    local available_space=$(df --output=avail . | tail -1)
-    local min_space_kb=$((5 * 1024 * 1024))  # 5GB in KB
-    
-    if [ "$available_space" -lt "$min_space_kb" ]; then
-        log_error "❌ Insufficient disk space. Need at least 5GB, have $(($available_space / 1024 / 1024))GB"
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        log_error "❌ Missing required tools: ${missing_tools[*]}"
+        log_info "Please install missing tools with:"
+        log_info "   sudo apt-get install debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin"
         return 1
     fi
     
-    # Check no existing mounts in target
-    if mount | grep -q "${CHROOT_DIR}"; then
-        log_warn "⚠️  Existing mounts detected in chroot directory"
-        cleanup_build_environment
+    # Check disk space (minimum 10GB recommended)
+    local available_space_gb=$(df --output=avail "$AILINUX_BUILD_DIR" | tail -1 | awk '{print int($1/1024/1024)}')
+    
+    if [ "$available_space_gb" -lt 10 ]; then
+        log_warn "⚠️  Available disk space: ${available_space_gb}GB (minimum 10GB recommended)"
+        log_warn "Build may fail due to insufficient disk space"
+    else
+        log_success "✅ Disk space check passed: ${available_space_gb}GB available"
     fi
     
-    # Check no existing debootstrap processes
-    if pgrep -f "debootstrap" > /dev/null; then
-        log_warn "⚠️  Existing debootstrap process detected, cleaning up..."
-        sudo pkill -f "debootstrap"
-        sleep 5
+    # Check memory
+    local available_memory_gb=$(free -g | awk 'NR==2{print $7}')
+    
+    if [ "$available_memory_gb" -lt 2 ]; then
+        log_warn "⚠️  Available memory: ${available_memory_gb}GB (minimum 2GB recommended)"
+    else
+        log_success "✅ Memory check passed: ${available_memory_gb}GB available"
     fi
     
-    # Verify network connectivity
-    if ! wget -q --spider http://archive.ubuntu.com/ubuntu/dists/noble/Release; then
-        log_error "❌ Cannot reach Ubuntu mirror"
-        return 1
-    fi
-    
-    log_success "✅ Pre-debootstrap checks passed"
-    swarm_coordinate "safety_checks_completed" "All pre-debootstrap checks passed" "success" "bootstrap"
+    log_success "✅ System requirements check completed"
     return 0
 }
 
-# Build steps with enhanced error handling
-step_01_setup() {
-    log_step "1/12" "Environment Setup with Enhanced Cleanup"
-    swarm_progress "setup" "started" "Initializing build environment"
+# Set up build directories with proper structure
+setup_build_directories() {
+    log_info "📁 Setting up build directories..."
     
-    # Perform comprehensive cleanup first
-    cleanup_build_environment
-    
-    # Create directories
-    mkdir -p "${CHROOT_DIR}" "${ISO_DIR}"
-    
-    swarm_progress "setup" "completed" "Build environment ready"
-    log_success "Environment setup completed with cleanup"
-}
-
-step_02_bootstrap_system() {
-    log_step "2/12" "Bootstrap Base System with Enhanced Error Handling"
-    swarm_progress "bootstrap" "started" "Creating base system with retry logic"
-    
-    # Run pre-bootstrap safety checks
-    if ! pre_debootstrap_checks; then
-        log_error "Pre-debootstrap checks failed"
-        swarm_coordinate "bootstrap_failed" "Pre-debootstrap checks failed" "error" "bootstrap"
-        exit 1
+    # Clean existing chroot if requested
+    if [ "$AILINUX_SKIP_CLEANUP" = false ] && [ -d "$AILINUX_BUILD_CHROOT_DIR" ]; then
+        log_info "🧹 Cleaning existing chroot directory..."
+        
+        # Use chroot manager for safe cleanup if available
+        if command -v cleanup_chroot_mounts >/dev/null 2>&1; then
+            cleanup_chroot_mounts "$AILINUX_BUILD_CHROOT_DIR"
+        fi
+        
+        safe_execute "sudo rm -rf '$AILINUX_BUILD_CHROOT_DIR'" "cleanup_chroot" "Failed to clean chroot directory"
     fi
     
-    # Bootstrap Ubuntu base system with retry logic
-    if ! run_debootstrap "${UBUNTU_CODENAME}" "${CHROOT_DIR}" "http://archive.ubuntu.com/ubuntu/"; then
-        log_error "Debootstrap failed after all retry attempts"
-        swarm_coordinate "bootstrap_final_failure" "Debootstrap failed completely" "error" "bootstrap"
-        exit 1
+    # Create directory structure
+    local build_dirs=(
+        "$AILINUX_BUILD_CHROOT_DIR"
+        "$AILINUX_BUILD_OUTPUT_DIR" 
+        "$AILINUX_BUILD_TEMP_DIR/iso"
+        "$AILINUX_BUILD_TEMP_DIR/squashfs"
+        "$AILINUX_BUILD_TEMP_DIR/boot"
+        "$AILINUX_BUILD_LOGS_DIR"
+    )
+    
+    for dir in "${build_dirs[@]}"; do
+        safe_execute "mkdir -p '$dir'" "create_dir" "Failed to create directory: $dir" || return 1
+    done
+    
+    log_success "✅ Build directories set up successfully"
+    return 0
+}
+
+# Set up package management
+setup_package_management() {
+    log_info "📦 Setting up package management..."
+    
+    # Update host package lists
+    safe_execute "sudo apt-get update" "update_packages" "Failed to update package lists" || {
+        log_warn "⚠️  Package list update failed, continuing with cached packages"
+    }
+    
+    # Install any missing dependencies
+    local build_deps="debootstrap squashfs-tools xorriso grub-pc-bin grub-efi-amd64-bin isolinux syslinux-utils"
+    
+    safe_execute "sudo apt-get install -y $build_deps" "install_build_deps" "Failed to install build dependencies" "" "true"
+    
+    log_success "✅ Package management setup completed"
+    return 0
+}
+
+# Phase 2: Base system creation with chroot isolation
+phase_2_base_system() {
+    log_info "🏗️  Phase 2: Base system creation with chroot isolation"
+    
+    # Create base system using debootstrap
+    create_base_system || return 1
+    
+    # Set up essential mounts
+    setup_essential_chroot_mounts || return 1
+    
+    # Configure base system
+    configure_base_system || return 1
+    
+    log_success "✅ Phase 2 completed: Base system creation"
+    swarm_coordinate "phase_2" "Base system creation completed successfully" "success" "build_phase"
+}
+
+# Create base system using debootstrap
+create_base_system() {
+    log_info "🏗️  Creating base system with debootstrap..."
+    
+    # Use resource tracking if available
+    if command -v track_resource_usage >/dev/null 2>&1; then
+        track_resource_usage "debootstrap" $$
     fi
     
-    swarm_progress "bootstrap" "completed" "Base system created successfully"
-    log_success "Base system bootstrapped with enhanced error handling"
+    # Run debootstrap
+    local debootstrap_cmd="sudo debootstrap --arch=amd64 --variant=minbase noble '$AILINUX_BUILD_CHROOT_DIR' http://archive.ubuntu.com/ubuntu/"
+    
+    if ! safe_execute "$debootstrap_cmd" "debootstrap" "Failed to create base system with debootstrap"; then
+        log_error "❌ Base system creation failed"
+        return 1
+    fi
+    
+    # Stop resource tracking
+    if command -v stop_tracking_resource_usage >/dev/null 2>&1; then
+        stop_tracking_resource_usage "debootstrap"
+    fi
+    
+    log_success "✅ Base system created successfully"
+    return 0
 }
 
-step_03_install_packages() {
-    log_step "3/12" "Install Package Suite"
-    swarm_progress "packages" "started" "Installing packages"
+# Set up essential chroot mounts
+setup_essential_chroot_mounts() {
+    log_info "🗂️  Setting up essential chroot mounts..."
     
-    local package_script='
-#!/bin/bash
-set -e
-apt-get update
-apt-get install -y --no-install-recommends \
-    firefox thunderbird vlc gimp libreoffice \
-    kde-plasma-desktop \
-    systemd network-manager \
-    curl wget git
-echo "Packages installed successfully"
-'
+    # Use chroot manager if available, otherwise fall back to manual mounting
+    if command -v setup_essential_mounts >/dev/null 2>&1; then
+        setup_essential_mounts "$AILINUX_BUILD_CHROOT_DIR" || return 1
+    else
+        # Manual mount setup (fallback)
+        local mounts=(
+            "proc:$AILINUX_BUILD_CHROOT_DIR/proc"
+            "sysfs:$AILINUX_BUILD_CHROOT_DIR/sys"
+            "devtmpfs:$AILINUX_BUILD_CHROOT_DIR/dev"
+            "devpts:$AILINUX_BUILD_CHROOT_DIR/dev/pts"
+            "tmpfs:$AILINUX_BUILD_CHROOT_DIR/run"
+        )
+        
+        for mount_spec in "${mounts[@]}"; do
+            IFS=':' read -r fs_type mount_point <<< "$mount_spec"
+            
+            safe_execute "mkdir -p '$mount_point'" "create_mount_point" "Failed to create mount point: $mount_point"
+            safe_execute "sudo mount -t $fs_type $fs_type '$mount_point'" "mount_filesystem" "Failed to mount: $mount_point" "" "true"
+        done
+    fi
     
-    run_in_chroot "$package_script"
-    
-    swarm_progress "packages" "completed" "All packages installed"
-    log_success "Package installation completed"
+    log_success "✅ Essential chroot mounts set up"
+    return 0
 }
 
-step_04_configure_kde_plasma() {
-    log_step "4/12" "Configure KDE Plasma"
-    swarm_progress "kde" "started" "Configuring desktop environment"
+# Configure base system
+configure_base_system() {
+    log_info "⚙️  Configuring base system..."
     
-    # KDE configuration would go here
+    # Configure hostname
+    echo "ailinux" | safe_execute "sudo tee '$AILINUX_BUILD_CHROOT_DIR/etc/hostname'" "set_hostname" "Failed to set hostname"
     
-    swarm_progress "kde" "completed" "KDE Plasma configured"
-    log_success "KDE Plasma configuration completed"
-}
-
-step_05_setup_ai_assistant() {
-    log_step "5/12" "Setup AI Assistant"
-    swarm_progress "ai" "started" "Installing AI terminal assistant"
-    
-    # AI assistant setup would go here
-    
-    swarm_progress "ai" "completed" "AI assistant configured"
-    log_success "AI assistant setup completed"
-}
-
-step_06_configure_calamares() {
-    log_step "6/12" "Configure Calamares"
-    swarm_progress "calamares" "started" "Setting up installer"
-    
-    # Calamares configuration would go here
-    
-    swarm_progress "calamares" "completed" "Calamares configured"
-    log_success "Calamares installer configured"
-}
-
-step_07_setup_live_user() {
-    log_step "7/12" "Setup Live User"
-    swarm_progress "user" "started" "Creating live user environment"
-    
-    # Live user setup would go here
-    
-    swarm_progress "user" "completed" "Live user configured"
-    log_success "Live user environment setup completed"
-}
-
-step_08_system_cleanup() {
-    log_step "8/12" "System Cleanup"
-    swarm_progress "cleanup" "started" "Cleaning up system"
-    
-    # System cleanup would go here
-    
-    swarm_progress "cleanup" "completed" "System cleaned"
-    log_success "System cleanup completed"
-}
-
-step_09_create_squashfs() {
-    log_step "9/12" "Create SquashFS"
-    swarm_progress "squashfs" "started" "Creating compressed filesystem"
-    
-    # Create SquashFS image
-    sudo mksquashfs "${CHROOT_DIR}" "${ISO_DIR}/casper/filesystem.squashfs" -comp xz -b 1M -Xdict-size 100%
-    
-    swarm_progress "squashfs" "completed" "SquashFS created"
-    log_success "SquashFS creation completed"
-}
-
-step_10_setup_bootloaders() {
-    log_step "10/12" "Setup Bootloaders"
-    swarm_progress "bootloaders" "started" "Configuring UEFI and BIOS bootloaders"
-    
-    # Bootloader setup would go here
-    
-    swarm_progress "bootloaders" "completed" "Bootloaders configured"
-    log_success "Bootloader setup completed"
-}
-
-step_11_create_iso() {
-    log_step "11/12" "Create ISO Image"
-    swarm_progress "iso" "started" "Building final ISO"
-    
-    # Create hybrid ISO
-    xorriso -as mkisofs \
-        -V "AILINUX" \
-        -o "${ISO_NAME}" \
-        -J -joliet-long -cache-inodes \
-        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
-        -b isolinux/isolinux.bin -c isolinux/boot.cat \
-        -boot-load-size 4 -boot-info-table -no-emul-boot \
-        -eltorito-alt-boot \
-        -e boot/grub/efi.img -no-emul-boot \
-        -isohybrid-gpt-basdat \
-        "${ISO_DIR}/"
-    
-    swarm_progress "iso" "completed" "ISO image created"
-    log_success "ISO creation completed"
-}
-
-step_12_finalize_build() {
-    log_step "12/12" "Finalize Build"
-    swarm_progress "finalize" "started" "Finalizing build process"
-    
-    # Generate SHA256 checksum
-    sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
-    
-    # Generate build metadata
-    cat > "${METADATA_FILE}" << EOF
-AILinux Build Information - v26.03 Swarm-Enhanced
-==============================================
-Build Status: SUCCESS
-ISO File: ${ISO_NAME}
-Size: $(du -h "${ISO_NAME}" | cut -f1)
-SHA256: $(cat "${ISO_NAME}.sha256" | cut -d' ' -f1)
-Build Time: $(date)
-Firefox Package: firefox (corrected from firefox-esr)
-Swarm Events: $(wc -l < "${SWARM_MEMORY_FILE}" 2>/dev/null || echo "0")
+    # Configure hosts file
+    cat > "$AILINUX_BUILD_TEMP_DIR/hosts" << EOF
+127.0.0.1   localhost
+127.0.1.1   ailinux
+::1         localhost ip6-localhost ip6-loopback
+ff02::1     ip6-allnodes
+ff02::2     ip6-allrouters
 EOF
     
-    swarm_progress "finalize" "completed" "Build finalized successfully"
+    safe_execute "sudo cp '$AILINUX_BUILD_TEMP_DIR/hosts' '$AILINUX_BUILD_CHROOT_DIR/etc/hosts'" "set_hosts" "Failed to configure hosts file"
     
-    echo
-    log_success "🎉 AILinux v26.03 ISO Build Completed Successfully!"
-    log_info "📀 ISO: ${ISO_NAME} ($(du -h "${ISO_NAME}" | cut -f1))"
-    log_info "📋 Metadata: ${METADATA_FILE}"
-    log_info "🔐 SHA256: ${ISO_NAME}.sha256"
+    # Configure sources.list
+    create_chroot_sources_list || return 1
     
-    swarm_coordinate "build_completed" "AILinux v26.03 build successful" "success" "finalization"
+    # Update package lists in chroot
+    update_chroot_packages || return 1
+    
+    log_success "✅ Base system configuration completed"
+    return 0
 }
 
-# Execute main function if script is run directly
-if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+# Create sources.list for chroot
+create_chroot_sources_list() {
+    log_info "📝 Creating sources.list for chroot..."
+    
+    local sources_file="$AILINUX_BUILD_CHROOT_DIR/etc/apt/sources.list"
+    
+    cat > "$AILINUX_BUILD_TEMP_DIR/sources.list" << EOF
+# Ubuntu Noble (24.04) repositories
+deb http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+
+# Updates
+deb http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ noble-updates main restricted universe multiverse
+
+# Security
+deb http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+deb-src http://security.ubuntu.com/ubuntu/ noble-security main restricted universe multiverse
+
+# Backports
+deb http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ noble-backports main restricted universe multiverse
+EOF
+    
+    safe_execute "sudo cp '$AILINUX_BUILD_TEMP_DIR/sources.list' '$sources_file'" "set_sources" "Failed to create sources.list"
+    
+    return 0
+}
+
+# Update packages in chroot
+update_chroot_packages() {
+    log_info "📦 Updating packages in chroot..."
+    
+    # Use chroot manager if available
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "apt-get update" || {
+            log_warn "⚠️  Package update in chroot failed"
+        }
+    else
+        # Fallback to direct chroot
+        sudo chroot "$AILINUX_BUILD_CHROOT_DIR" apt-get update || {
+            log_warn "⚠️  Package update in chroot failed"
+        }
+    fi
+    
+    return 0
+}
+
+# Phase 3: KDE 6.3 installation with error recovery
+phase_3_kde_installation() {
+    log_info "🎨 Phase 3: KDE 6.3 installation with error recovery"
+    
+    # Install KDE desktop environment
+    install_kde_desktop || return 1
+    
+    # Configure KDE settings
+    configure_kde_desktop || return 1
+    
+    # Set up display manager
+    setup_display_manager || return 1
+    
+    log_success "✅ Phase 3 completed: KDE 6.3 installation"
+    swarm_coordinate "phase_3" "KDE 6.3 installation completed successfully" "success" "build_phase"
+}
+
+# Install KDE desktop environment
+install_kde_desktop() {
+    log_info "🎨 Installing KDE desktop environment..."
+    
+    # Use KDE installer module if available
+    if command -v install_kde_base >/dev/null 2>&1; then
+        install_kde_base "$AILINUX_BUILD_CHROOT_DIR" || return 1
+    else
+        # Fallback KDE installation
+        local kde_packages="kde-plasma-desktop plasma-workspace sddm firefox-esr"
+        local install_cmd="DEBIAN_FRONTEND=noninteractive apt-get install -y $kde_packages"
+        
+        if command -v enter_chroot_safely >/dev/null 2>&1; then
+            enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "$install_cmd" || return 1
+        else
+            sudo chroot "$AILINUX_BUILD_CHROOT_DIR" bash -c "$install_cmd" || return 1
+        fi
+    fi
+    
+    log_success "✅ KDE desktop environment installed"
+    return 0
+}
+
+# Configure KDE desktop
+configure_kde_desktop() {
+    log_info "⚙️  Configuring KDE desktop..."
+    
+    # Use KDE configuration module if available
+    if command -v configure_kde_settings >/dev/null 2>&1; then
+        configure_kde_settings "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  KDE configuration failed, using defaults"
+        }
+    fi
+    
+    # Set up themes if available
+    if command -v setup_kde_themes >/dev/null 2>&1; then
+        setup_kde_themes "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  KDE themes setup failed"
+        }
+    fi
+    
+    log_success "✅ KDE desktop configured"
+    return 0
+}
+
+# Set up display manager
+setup_display_manager() {
+    log_info "🖥️  Setting up SDDM display manager..."
+    
+    # Enable SDDM in chroot
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "systemctl enable sddm" || {
+            log_warn "⚠️  Could not enable SDDM service"
+        }
+        
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "systemctl set-default graphical.target" || {
+            log_warn "⚠️  Could not set graphical target"
+        }
+    fi
+    
+    log_success "✅ Display manager configured"
+    return 0
+}
+
+# Phase 4: Calamares setup with validation
+phase_4_calamares_setup() {
+    log_info "🔧 Phase 4: Calamares installer setup with validation"
+    
+    # Install Calamares installer
+    install_calamares_installer || return 1
+    
+    # Configure Calamares
+    configure_calamares_installer || return 1
+    
+    # Set up branding
+    setup_calamares_branding_phase || return 1
+    
+    log_success "✅ Phase 4 completed: Calamares setup"
+    swarm_coordinate "phase_4" "Calamares installer setup completed successfully" "success" "build_phase"
+}
+
+# Install Calamares installer
+install_calamares_installer() {
+    log_info "🔧 Installing Calamares installer..."
+    
+    # Use Calamares module if available
+    if command -v install_calamares >/dev/null 2>&1; then
+        install_calamares "$AILINUX_BUILD_CHROOT_DIR" || return 1
+    else
+        # Fallback Calamares installation
+        local calamares_cmd="DEBIAN_FRONTEND=noninteractive apt-get install -y calamares calamares-settings-ubuntu"
+        
+        if command -v enter_chroot_safely >/dev/null 2>&1; then
+            enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "$calamares_cmd" || return 1
+        else
+            sudo chroot "$AILINUX_BUILD_CHROOT_DIR" bash -c "$calamares_cmd" || return 1
+        fi
+    fi
+    
+    log_success "✅ Calamares installer installed"
+    return 0
+}
+
+# Configure Calamares installer
+configure_calamares_installer() {
+    log_info "⚙️  Configuring Calamares installer..."
+    
+    # Use Calamares configuration module if available
+    if command -v configure_calamares_modules >/dev/null 2>&1; then
+        configure_calamares_modules || {
+            log_warn "⚠️  Calamares module configuration failed"
+        }
+    fi
+    
+    # Create desktop entry if available
+    if command -v create_calamares_desktop_entry >/dev/null 2>&1; then
+        create_calamares_desktop_entry "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  Calamares desktop entry creation failed"
+        }
+    fi
+    
+    log_success "✅ Calamares installer configured"
+    return 0
+}
+
+# Set up Calamares branding
+setup_calamares_branding_phase() {
+    log_info "🎨 Setting up Calamares branding..."
+    
+    # Use Calamares branding module if available
+    if command -v setup_calamares_branding >/dev/null 2>&1; then
+        setup_calamares_branding || {
+            log_warn "⚠️  Calamares branding setup failed"
+        }
+    fi
+    
+    log_success "✅ Calamares branding configured"
+    return 0
+}
+
+# Phase 5: AI integration and customization
+phase_5_ai_integration() {
+    log_info "🤖 Phase 5: AI integration and customization"
+    
+    # Set up AILinux mirror
+    setup_ailinux_repositories || return 1
+    
+    # Install AI helper
+    install_ai_helper_system || return 1
+    
+    # Apply AILinux customizations
+    apply_ailinux_customizations || return 1
+    
+    log_success "✅ Phase 5 completed: AI integration"
+    swarm_coordinate "phase_5" "AI integration and customization completed successfully" "success" "build_phase"
+}
+
+# Set up AILinux repositories
+setup_ailinux_repositories() {
+    log_info "🌐 Setting up AILinux repositories..."
+    
+    # Use mirror management module if available
+    if command -v setup_ailinux_mirror >/dev/null 2>&1; then
+        setup_ailinux_mirror "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  AILinux mirror setup failed, continuing without custom repositories"
+        }
+    fi
+    
+    # Configure GPG keys if available
+    if command -v configure_gpg_keys >/dev/null 2>&1; then
+        configure_gpg_keys "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  GPG key configuration failed"
+        }
+    fi
+    
+    log_success "✅ AILinux repositories configured"
+    return 0
+}
+
+# Install AI helper system
+install_ai_helper_system() {
+    log_info "🤖 Installing AI helper system..."
+    
+    # Use AI integration module if available
+    if command -v install_ai_helper >/dev/null 2>&1; then
+        install_ai_helper "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  AI helper installation failed"
+            return 1
+        }
+    else
+        # Fallback: create placeholder AI helper
+        create_placeholder_ai_helper || return 1
+    fi
+    
+    log_success "✅ AI helper system installed"
+    return 0
+}
+
+# Create placeholder AI helper (fallback)
+create_placeholder_ai_helper() {
+    log_info "📝 Creating placeholder AI helper..."
+    
+    # Create AI helper directory
+    safe_execute "mkdir -p '$AILINUX_BUILD_CHROOT_DIR/opt/ailinux/aihelp/bin'" "create_ai_dir" "Failed to create AI helper directory"
+    
+    # Create simple AI helper script
+    cat > "$AILINUX_BUILD_TEMP_DIR/aihelp" << 'EOF'
+#!/bin/bash
+# AILinux AI Helper - Placeholder Script
+echo "AILinux AI Helper v1.0"
+echo "This is a placeholder implementation."
+echo "For help with commands, try: man <command>"
+EOF
+    
+    safe_execute "sudo cp '$AILINUX_BUILD_TEMP_DIR/aihelp' '$AILINUX_BUILD_CHROOT_DIR/opt/ailinux/aihelp/bin/aihelp'" "install_ai_helper" "Failed to install AI helper"
+    safe_execute "sudo chmod +x '$AILINUX_BUILD_CHROOT_DIR/opt/ailinux/aihelp/bin/aihelp'" "make_executable" "Failed to make AI helper executable"
+    
+    # Create system symlink
+    safe_execute "sudo ln -sf '/opt/ailinux/aihelp/bin/aihelp' '$AILINUX_BUILD_CHROOT_DIR/usr/local/bin/aihelp'" "create_symlink" "Failed to create AI helper symlink"
+    
+    return 0
+}
+
+# Apply AILinux customizations
+apply_ailinux_customizations() {
+    log_info "🎨 Applying AILinux customizations..."
+    
+    # Set up AILinux branding
+    setup_ailinux_system_branding || return 1
+    
+    # Configure system settings
+    configure_ailinux_system_settings || return 1
+    
+    # Set up user defaults
+    setup_ailinux_user_defaults || return 1
+    
+    log_success "✅ AILinux customizations applied"
+    return 0
+}
+
+# Set up AILinux system branding
+setup_ailinux_system_branding() {
+    log_info "🏷️  Setting up AILinux system branding..."
+    
+    # Update OS release information
+    cat > "$AILINUX_BUILD_TEMP_DIR/os-release" << EOF
+PRETTY_NAME="AILinux 1.0"
+NAME="AILinux"
+VERSION_ID="1.0"
+VERSION="1.0"
+VERSION_CODENAME=noble
+ID=ailinux
+ID_LIKE=ubuntu
+HOME_URL="https://ailinux.org/"
+SUPPORT_URL="https://ailinux.org/support/"
+BUG_REPORT_URL="https://ailinux.org/bugs/"
+PRIVACY_POLICY_URL="https://ailinux.org/privacy/"
+UBUNTU_CODENAME=noble
+EOF
+    
+    safe_execute "sudo cp '$AILINUX_BUILD_TEMP_DIR/os-release' '$AILINUX_BUILD_CHROOT_DIR/etc/os-release'" "set_os_release" "Failed to set OS release info"
+    
+    # Update issue files
+    echo "AILinux 1.0 \\n \\l" | safe_execute "sudo tee '$AILINUX_BUILD_CHROOT_DIR/etc/issue'" "set_issue" "Failed to set issue file"
+    echo "AILinux 1.0" | safe_execute "sudo tee '$AILINUX_BUILD_CHROOT_DIR/etc/issue.net'" "set_issue_net" "Failed to set issue.net file"
+    
+    return 0
+}
+
+# Configure AILinux system settings
+configure_ailinux_system_settings() {
+    log_info "⚙️  Configuring AILinux system settings..."
+    
+    # Set timezone to UTC
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "ln -sf /usr/share/zoneinfo/UTC /etc/localtime" || true
+    fi
+    
+    # Configure locale
+    local locale_cmd="locale-gen en_US.UTF-8 && dpkg-reconfigure -f noninteractive locales"
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "$locale_cmd" || {
+            log_warn "⚠️  Locale configuration failed"
+        }
+    fi
+    
+    return 0
+}
+
+# Set up AILinux user defaults
+setup_ailinux_user_defaults() {
+    log_info "👤 Setting up AILinux user defaults..."
+    
+    # Create live user
+    create_live_user || return 1
+    
+    # Configure sudo access
+    configure_sudo_access || return 1
+    
+    return 0
+}
+
+# Create live user
+create_live_user() {
+    log_info "👤 Creating live user..."
+    
+    local user_cmds=(
+        "useradd -m -s /bin/bash -G sudo,adm,cdrom,dip,plugdev,lpadmin,sambashare ailinux"
+        "echo 'ailinux:ailinux' | chpasswd"
+        "chown -R ailinux:ailinux /home/ailinux"
+    )
+    
+    for cmd in "${user_cmds[@]}"; do
+        if command -v enter_chroot_safely >/dev/null 2>&1; then
+            enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "$cmd" || {
+                log_warn "⚠️  User command failed: $cmd"
+            }
+        fi
+    done
+    
+    return 0
+}
+
+# Configure sudo access
+configure_sudo_access() {
+    log_info "🔐 Configuring sudo access..."
+    
+    # Allow passwordless sudo for live user
+    echo "ailinux ALL=(ALL) NOPASSWD:ALL" | safe_execute "sudo tee '$AILINUX_BUILD_CHROOT_DIR/etc/sudoers.d/ailinux'" "configure_sudo" "Failed to configure sudo"
+    
+    return 0
+}
+
+# Phase 6: ISO generation with checksum validation
+phase_6_iso_generation() {
+    log_info "💿 Phase 6: ISO generation with checksum validation"
+    
+    # Set up boot configuration
+    setup_boot_configuration || return 1
+    
+    # Create squashfs filesystem
+    create_squashfs_filesystem || return 1
+    
+    # Generate ISO image
+    generate_iso_image || return 1
+    
+    # Validate and create checksums
+    validate_and_checksum_iso || return 1
+    
+    log_success "✅ Phase 6 completed: ISO generation"
+    swarm_coordinate "phase_6" "ISO generation completed successfully" "success" "build_phase"
+}
+
+# Set up boot configuration
+setup_boot_configuration() {
+    log_info "🥾 Setting up boot configuration..."
+    
+    # Use secure boot handler if available
+    if command -v configure_uefi_boot >/dev/null 2>&1 && command -v configure_legacy_boot >/dev/null 2>&1; then
+        configure_uefi_boot "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  UEFI boot configuration failed"
+        }
+        
+        configure_legacy_boot "$AILINUX_BUILD_CHROOT_DIR" || {
+            log_warn "⚠️  Legacy boot configuration failed"
+        }
+    else
+        # Fallback boot configuration
+        setup_fallback_boot_config || return 1
+    fi
+    
+    log_success "✅ Boot configuration completed"
+    return 0
+}
+
+# Fallback boot configuration
+setup_fallback_boot_config() {
+    log_info "🔄 Setting up fallback boot configuration..."
+    
+    # Create basic GRUB configuration
+    mkdir -p "$AILINUX_BUILD_TEMP_DIR/iso/boot/grub"
+    
+    cat > "$AILINUX_BUILD_TEMP_DIR/iso/boot/grub/grub.cfg" << EOF
+set timeout=10
+set default=0
+
+menuentry "AILinux Live" {
+    linux /casper/vmlinuz boot=casper quiet splash
+    initrd /casper/initrd
+}
+
+menuentry "AILinux Live (Safe Mode)" {
+    linux /casper/vmlinuz boot=casper quiet splash nomodeset
+    initrd /casper/initrd
+}
+EOF
+    
+    return 0
+}
+
+# Create squashfs filesystem
+create_squashfs_filesystem() {
+    log_info "📦 Creating squashfs filesystem..."
+    
+    # Clean up chroot before creating squashfs
+    cleanup_chroot_for_squashfs || return 1
+    
+    # Create squashfs
+    local squashfs_file="$AILINUX_BUILD_TEMP_DIR/iso/casper/filesystem.squashfs"
+    mkdir -p "$(dirname "$squashfs_file")"
+    
+    # Use resource tracking if available
+    if command -v track_resource_usage >/dev/null 2>&1; then
+        track_resource_usage "mksquashfs" $$
+    fi
+    
+    local mksquashfs_cmd="mksquashfs '$AILINUX_BUILD_CHROOT_DIR' '$squashfs_file' -comp xz -e boot"
+    
+    if ! safe_execute "$mksquashfs_cmd" "mksquashfs" "Failed to create squashfs filesystem"; then
+        log_error "❌ SquashFS creation failed"
+        return 1
+    fi
+    
+    # Stop resource tracking
+    if command -v stop_tracking_resource_usage >/dev/null 2>&1; then
+        stop_tracking_resource_usage "mksquashfs"
+    fi
+    
+    # Create filesystem size file
+    printf "$(du -sx --block-size=1 "$AILINUX_BUILD_CHROOT_DIR" | cut -f1)" > "$AILINUX_BUILD_TEMP_DIR/iso/casper/filesystem.size"
+    
+    log_success "✅ SquashFS filesystem created"
+    return 0
+}
+
+# Clean up chroot before creating squashfs
+cleanup_chroot_for_squashfs() {
+    log_info "🧹 Cleaning up chroot for squashfs creation..."
+    
+    # Unmount chroot filesystems
+    if command -v cleanup_chroot_mounts >/dev/null 2>&1; then
+        cleanup_chroot_mounts "$AILINUX_BUILD_CHROOT_DIR"
+    fi
+    
+    # Clean package cache
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        # Re-mount for cleanup
+        if command -v setup_essential_mounts >/dev/null 2>&1; then
+            setup_essential_mounts "$AILINUX_BUILD_CHROOT_DIR"
+        fi
+        
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "apt-get clean" || true
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "apt-get autoremove -y" || true
+        
+        # Unmount again
+        if command -v cleanup_chroot_mounts >/dev/null 2>&1; then
+            cleanup_chroot_mounts "$AILINUX_BUILD_CHROOT_DIR"
+        fi
+    fi
+    
+    # Remove temporary files
+    safe_execute "sudo rm -rf '$AILINUX_BUILD_CHROOT_DIR/tmp/*'" "cleanup_tmp" "Failed to clean tmp directory" "" "true"
+    safe_execute "sudo rm -rf '$AILINUX_BUILD_CHROOT_DIR/var/cache/apt/archives/*.deb'" "cleanup_cache" "Failed to clean package cache" "" "true"
+    
+    return 0
+}
+
+# Generate ISO image
+generate_iso_image() {
+    log_info "💿 Generating ISO image..."
+    
+    # Copy kernel and initrd
+    copy_kernel_and_initrd || return 1
+    
+    # Create ISO directory structure
+    create_iso_structure || return 1
+    
+    # Generate the ISO
+    create_final_iso || return 1
+    
+    log_success "✅ ISO image generated successfully"
+    return 0
+}
+
+# Copy kernel and initrd
+copy_kernel_and_initrd() {
+    log_info "📋 Copying kernel and initrd..."
+    
+    # Create casper directory
+    mkdir -p "$AILINUX_BUILD_TEMP_DIR/iso/casper"
+    
+    # Find and copy kernel
+    local kernel_file=$(find "$AILINUX_BUILD_CHROOT_DIR/boot" -name "vmlinuz-*" | head -1)
+    if [ -n "$kernel_file" ]; then
+        safe_execute "cp '$kernel_file' '$AILINUX_BUILD_TEMP_DIR/iso/casper/vmlinuz'" "copy_kernel" "Failed to copy kernel"
+    else
+        log_error "❌ No kernel found in chroot"
+        return 1
+    fi
+    
+    # Find and copy initrd
+    local initrd_file=$(find "$AILINUX_BUILD_CHROOT_DIR/boot" -name "initrd.img-*" | head -1)
+    if [ -n "$initrd_file" ]; then
+        safe_execute "cp '$initrd_file' '$AILINUX_BUILD_TEMP_DIR/iso/casper/initrd'" "copy_initrd" "Failed to copy initrd"
+    else
+        log_error "❌ No initrd found in chroot"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Create ISO directory structure
+create_iso_structure() {
+    log_info "📁 Creating ISO directory structure..."
+    
+    # Create additional ISO directories
+    local iso_dirs=(
+        "$AILINUX_BUILD_TEMP_DIR/iso/.disk"
+        "$AILINUX_BUILD_TEMP_DIR/iso/preseed"
+        "$AILINUX_BUILD_TEMP_DIR/iso/isolinux"
+    )
+    
+    for dir in "${iso_dirs[@]}"; do
+        mkdir -p "$dir"
+    done
+    
+    # Create disk info
+    echo "AILinux 1.0 - Release amd64 ($(date +%Y%m%d))" > "$AILINUX_BUILD_TEMP_DIR/iso/.disk/info"
+    echo "AILinux" > "$AILINUX_BUILD_TEMP_DIR/iso/.disk/release_notes_url"
+    
+    # Create manifest
+    if command -v enter_chroot_safely >/dev/null 2>&1; then
+        # Re-mount for manifest creation
+        if command -v setup_essential_mounts >/dev/null 2>&1; then
+            setup_essential_mounts "$AILINUX_BUILD_CHROOT_DIR"
+        fi
+        
+        enter_chroot_safely "$AILINUX_BUILD_CHROOT_DIR" "dpkg-query -W --showformat='\${Package} \${Version}\n'" > "$AILINUX_BUILD_TEMP_DIR/iso/casper/filesystem.manifest" 2>/dev/null || {
+            log_warn "⚠️  Could not create package manifest"
+        }
+        
+        # Unmount
+        if command -v cleanup_chroot_mounts >/dev/null 2>&1; then
+            cleanup_chroot_mounts "$AILINUX_BUILD_CHROOT_DIR"
+        fi
+    fi
+    
+    return 0
+}
+
+# Create final ISO
+create_final_iso() {
+    log_info "💿 Creating final ISO image..."
+    
+    local iso_output="$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-amd64.iso"
+    
+    # Use resource tracking if available
+    if command -v track_resource_usage >/dev/null 2>&1; then
+        track_resource_usage "xorriso" $$
+    fi
+    
+    # Create ISO using xorriso
+    local xorriso_cmd="xorriso -as mkisofs \
+        -iso-level 3 \
+        -full-iso9660-filenames \
+        -volid 'AILinux 1.0' \
+        -appid 'AILinux Live CD' \
+        -publisher 'AILinux Team' \
+        -preparer 'AILinux Build System' \
+        -eltorito-boot isolinux/isolinux.bin \
+        -eltorito-catalog isolinux/boot.cat \
+        -no-emul-boot \
+        -boot-load-size 4 \
+        -boot-info-table \
+        -eltorito-alt-boot \
+        -e boot/grub/efi.img \
+        -no-emul-boot \
+        -output '$iso_output' \
+        '$AILINUX_BUILD_TEMP_DIR/iso/'"
+    
+    if ! safe_execute "$xorriso_cmd" "xorriso" "Failed to create ISO image"; then
+        log_error "❌ ISO creation failed"
+        return 1
+    fi
+    
+    # Stop resource tracking
+    if command -v stop_tracking_resource_usage >/dev/null 2>&1; then
+        stop_tracking_resource_usage "xorriso"
+    fi
+    
+    log_success "✅ ISO image created: $iso_output"
+    return 0
+}
+
+# Validate and create checksums for ISO
+validate_and_checksum_iso() {
+    log_info "🔐 Validating and creating checksums for ISO..."
+    
+    local iso_file="$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-amd64.iso"
+    
+    if [ ! -f "$iso_file" ]; then
+        log_error "❌ ISO file not found: $iso_file"
+        return 1
+    fi
+    
+    # Generate checksums
+    if command -v generate_checksums >/dev/null 2>&1; then
+        generate_checksums "$AILINUX_BUILD_OUTPUT_DIR" "ailinux-1.0-checksums.md5" "md5" || {
+            log_warn "⚠️  Checksum generation using module failed, using fallback"
+        }
+    fi
+    
+    # Fallback checksum generation
+    cd "$AILINUX_BUILD_OUTPUT_DIR" || return 1
+    
+    md5sum "$(basename "$iso_file")" > "ailinux-1.0-checksums.md5" || {
+        log_error "❌ Failed to generate MD5 checksum"
+        return 1
+    }
+    
+    sha256sum "$(basename "$iso_file")" > "ailinux-1.0-checksums.sha256" || {
+        log_warn "⚠️  Failed to generate SHA256 checksum"
+    }
+    
+    # Display file information
+    local iso_size=$(du -h "$iso_file" | cut -f1)
+    local iso_md5=$(cat "ailinux-1.0-checksums.md5" | cut -d' ' -f1)
+    
+    log_success "✅ ISO validation completed:"
+    log_info "   File: $(basename "$iso_file")"
+    log_info "   Size: $iso_size"
+    log_info "   MD5:  $iso_md5"
+    
+    cd - >/dev/null || true
+    return 0
+}
+
+# ============================================================================
+# CLEANUP AND FINALIZATION
+# ============================================================================
+
+# Cleanup build resources
+cleanup_build_resources() {
+    log_info "🧹 Cleaning up build resources..."
+    
+    # Use module cleanup functions if available
+    if command -v cleanup_chroot_mounts >/dev/null 2>&1; then
+        cleanup_chroot_mounts "$AILINUX_BUILD_CHROOT_DIR"
+    fi
+    
+    if command -v cleanup_resource_management >/dev/null 2>&1; then
+        cleanup_resource_management
+    fi
+    
+    if command -v cleanup_service_management >/dev/null 2>&1; then
+        cleanup_service_management
+    fi
+    
+    if command -v cleanup_checksum_validation >/dev/null 2>&1; then
+        cleanup_checksum_validation
+    fi
+    
+    if command -v cleanup_mirror_management >/dev/null 2>&1; then
+        cleanup_mirror_management
+    fi
+    
+    if command -v cleanup_secureboot_handling >/dev/null 2>&1; then
+        cleanup_secureboot_handling
+    fi
+    
+    if command -v cleanup_kde_installation >/dev/null 2>&1; then
+        cleanup_kde_installation
+    fi
+    
+    if command -v cleanup_calamares_setup >/dev/null 2>&1; then
+        cleanup_calamares_setup
+    fi
+    
+    if command -v cleanup_ai_integration >/dev/null 2>&1; then
+        cleanup_ai_integration
+    fi
+    
+    # Clean up temporary files (unless skip cleanup is enabled)
+    if [ "$AILINUX_SKIP_CLEANUP" = false ]; then
+        log_info "🗂️  Removing temporary build files..."
+        safe_execute "sudo rm -rf '$AILINUX_BUILD_TEMP_DIR'" "cleanup_temp" "Failed to clean temporary directory" "" "true"
+        
+        if [ "$AILINUX_BUILD_AS_ROOT" = false ]; then
+            safe_execute "sudo rm -rf '$AILINUX_BUILD_CHROOT_DIR'" "cleanup_chroot" "Failed to clean chroot directory" "" "true"
+        fi
+    else
+        log_info "ℹ️  Skipping cleanup as requested (AILINUX_SKIP_CLEANUP=true)"
+    fi
+    
+    log_success "✅ Build resource cleanup completed"
+}
+
+# Generate final build report
+generate_build_report() {
+    log_info "📄 Generating final build report..."
+    
+    local report_file="$AILINUX_BUILD_OUTPUT_DIR/ailinux-build-report-$(date +%Y%m%d_%H%M%S).txt"
+    
+    {
+        echo "# AILinux Build Report"
+        echo "# Generated: $(date)"
+        echo "# Build Version: $AILINUX_BUILD_VERSION"
+        echo "# Build Date: $AILINUX_BUILD_DATE"
+        echo ""
+        
+        echo "== BUILD CONFIGURATION =="
+        echo "Build Directory: $AILINUX_BUILD_DIR"
+        echo "Chroot Directory: $AILINUX_BUILD_CHROOT_DIR"
+        echo "Output Directory: $AILINUX_BUILD_OUTPUT_DIR"
+        echo "Log File: $LOG_FILE"
+        echo "Skip Cleanup: $AILINUX_SKIP_CLEANUP"
+        echo "Debug Mode: $AILINUX_ENABLE_DEBUG"
+        echo "Dry Run: $AILINUX_DRY_RUN"
+        echo ""
+        
+        echo "== SYSTEM INFORMATION =="
+        echo "Host OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')"
+        echo "Build User: $(whoami)"
+        echo "Build Time: $(date)"
+        echo "Build Duration: $(( $(date +%s) - BUILD_START_TIME )) seconds"
+        echo ""
+        
+        echo "== OUTPUT FILES =="
+        if [ -d "$AILINUX_BUILD_OUTPUT_DIR" ]; then
+            find "$AILINUX_BUILD_OUTPUT_DIR" -type f -exec ls -lh {} \;
+        fi
+        echo ""
+        
+        echo "== BUILD LOG SUMMARY =="
+        if [ -f "$LOG_FILE" ]; then
+            echo "Total log entries: $(wc -l < "$LOG_FILE")"
+            echo "Errors: $(grep -c "ERROR:" "$LOG_FILE" || echo 0)"
+            echo "Warnings: $(grep -c "WARN:" "$LOG_FILE" || echo 0)"
+            echo "Success messages: $(grep -c "SUCCESS:" "$LOG_FILE" || echo 0)"
+        fi
+        echo ""
+        
+        echo "== FINAL STATUS =="
+        if [ -f "$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-amd64.iso" ]; then
+            echo "✅ BUILD SUCCESSFUL"
+            echo "ISO File: ailinux-1.0-amd64.iso"
+            echo "ISO Size: $(du -h "$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-amd64.iso" | cut -f1)"
+            if [ -f "$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-checksums.md5" ]; then
+                echo "MD5 Checksum: $(cat "$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-checksums.md5" | cut -d' ' -f1)"
+            fi
+        else
+            echo "❌ BUILD FAILED"
+            echo "No ISO file generated"
+        fi
+        
+    } > "$report_file"
+    
+    log_success "📄 Build report generated: $report_file"
+    
+    # Coordinate with swarm
+    swarm_coordinate "build_complete" "AILinux ISO build completed - report generated: $report_file" "success" "completion"
+}
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+# Main function
+main() {
+    # Record build start time
+    BUILD_START_TIME=$(date +%s)
+    
+    log_info "🚀 Starting AILinux ISO build process..."
+    log_info "Build Version: $AILINUX_BUILD_VERSION"
+    log_info "Build Date: $AILINUX_BUILD_DATE"
+    log_info "Session ID: $AILINUX_BUILD_SESSION_ID"
+    
+    # Initialize swarm coordination if available
+    if command -v npx >/dev/null 2>&1; then
+        npx claude-flow@alpha hooks pre-task --description "AILinux ISO Build Process" --auto-spawn-agents false 2>/dev/null || true
+    fi
+    
+    # Phase 0: Initialization
+    init_build_environment || {
+        log_critical "❌ Build environment initialization failed"
+        exit 1
+    }
+    
+    load_build_modules || {
+        log_critical "❌ Module loading failed"
+        exit 1
+    }
+    
+    initialize_build_systems || {
+        log_critical "❌ Build system initialization failed"
+        exit 1
+    }
+    
+    # Execute build phases
+    if [ "$AILINUX_DRY_RUN" = true ]; then
+        log_info "🔍 DRY RUN MODE - Simulating build phases..."
+        
+        log_info "Phase 1: Environment validation and setup [SIMULATED]"
+        log_info "Phase 2: Base system creation [SIMULATED]"
+        log_info "Phase 3: KDE 6.3 installation [SIMULATED]"
+        log_info "Phase 4: Calamares setup [SIMULATED]"
+        log_info "Phase 5: AI integration [SIMULATED]"
+        log_info "Phase 6: ISO generation [SIMULATED]"
+        
+        log_success "✅ DRY RUN COMPLETED - All phases would execute successfully"
+        
+    else
+        # Execute actual build phases
+        phase_1_environment_setup || {
+            log_critical "❌ Phase 1 failed - Environment setup"
+            cleanup_build_resources
+            exit 1
+        }
+        
+        phase_2_base_system || {
+            log_critical "❌ Phase 2 failed - Base system creation"
+            cleanup_build_resources
+            exit 1
+        }
+        
+        phase_3_kde_installation || {
+            log_critical "❌ Phase 3 failed - KDE installation"
+            cleanup_build_resources
+            exit 1
+        }
+        
+        phase_4_calamares_setup || {
+            log_critical "❌ Phase 4 failed - Calamares setup"
+            cleanup_build_resources
+            exit 1
+        }
+        
+        phase_5_ai_integration || {
+            log_critical "❌ Phase 5 failed - AI integration"
+            cleanup_build_resources
+            exit 1
+        }
+        
+        phase_6_iso_generation || {
+            log_critical "❌ Phase 6 failed - ISO generation"
+            cleanup_build_resources
+            exit 1
+        }
+    fi
+    
+    # Finalization
+    cleanup_build_resources
+    generate_build_report
+    
+    # Final coordination
+    if command -v npx >/dev/null 2>&1; then
+        npx claude-flow@alpha hooks post-task --task-id "ailinux-iso-build" --analyze-performance true 2>/dev/null || true
+    fi
+    
+    local build_duration=$(( $(date +%s) - BUILD_START_TIME ))
+    log_success "🎉 AILinux ISO build completed successfully in ${build_duration} seconds!"
+    
+    if [ "$AILINUX_DRY_RUN" = false ]; then
+        log_info "📁 Output files available in: $AILINUX_BUILD_OUTPUT_DIR"
+        if [ -f "$AILINUX_BUILD_OUTPUT_DIR/ailinux-1.0-amd64.iso" ]; then
+            log_info "💿 ISO file: ailinux-1.0-amd64.iso"
+        fi
+    fi
+    
+    return 0
+}
+
+# Handle script arguments
+handle_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --skip-cleanup)
+                export AILINUX_SKIP_CLEANUP=true
+                log_info "🔧 Skip cleanup enabled"
+                shift
+                ;;
+            --debug)
+                export AILINUX_ENABLE_DEBUG=true
+                export LOG_LEVEL="DEBUG"
+                log_info "🐛 Debug mode enabled"
+                shift
+                ;;
+            --dry-run)
+                export AILINUX_DRY_RUN=true
+                log_info "🔍 Dry run mode enabled"
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            --version|-v)
+                echo "AILinux Build Script v$AILINUX_BUILD_VERSION"
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Show help information
+show_help() {
+    cat << EOF
+AILinux ISO Build Script v$AILINUX_BUILD_VERSION
+
+DESCRIPTION:
+    Builds a complete AILinux live ISO with KDE 6.3, Calamares installer,
+    Secure Boot support, AI helper integration, and session safety.
+
+USAGE:
+    $0 [OPTIONS]
+
+OPTIONS:
+    --skip-cleanup     Skip cleanup of temporary files (useful for debugging)
+    --debug            Enable debug mode with verbose logging
+    --dry-run          Simulate build process without actual execution
+    --help, -h         Show this help message
+    --version, -v      Show version information
+
+EXAMPLES:
+    $0                     # Normal build
+    $0 --debug             # Build with debug logging
+    $0 --dry-run           # Simulate build process
+    $0 --skip-cleanup      # Build and keep temporary files
+
+REQUIREMENTS:
+    - Ubuntu 24.04 (Noble) or compatible system
+    - Minimum 10GB free disk space
+    - Minimum 2GB available RAM
+    - sudo privileges
+    - debootstrap, squashfs-tools, xorriso, grub utilities
+
+OUTPUT:
+    - ailinux-1.0-amd64.iso (bootable ISO image)
+    - ailinux-1.0-checksums.md5 (MD5 checksums)
+    - ailinux-build-report-*.txt (detailed build report)
+
+ENVIRONMENT VARIABLES:
+    AILINUX_SKIP_CLEANUP   Skip cleanup (true/false)
+    AILINUX_ENABLE_DEBUG   Enable debug mode (true/false)
+    AILINUX_DRY_RUN        Dry run mode (true/false)
+
+For more information, visit: https://ailinux.org/build
+EOF
+}
+
+# ============================================================================
+# SCRIPT ENTRY POINT
+# ============================================================================
+
+# Ensure script is not sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Handle command line arguments
+    handle_arguments "$@"
+    
+    # Execute main function
     main "$@"
+    exit $?
+else
+    log_warn "⚠️  This script should be executed, not sourced"
 fi

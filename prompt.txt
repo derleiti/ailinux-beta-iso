@@ -1,3 +1,71 @@
+➕ **Erweiterung – Kein Netzwerk im Livesystem verfügbar:**
+
+Die aktuelle ISO bootet erfolgreich, aber **Netzwerkinterfaces sind nicht aktiv**, weder LAN noch WLAN. Das betrifft z. B.:
+
+- Keine automatische Aktivierung von `eth0` / `enpXsY`
+- Kein `NetworkManager` oder `systemd-networkd` im Live-Umfeld
+- Calamares kann daher keine Online-Funktionen wie Netinstall oder Mirror-Erkennung ausführen
+- Auch manuelles Setup (z. B. über `ip`, `nmtui`, `nmcli`) ist nur eingeschränkt möglich
+
+Bitte stelle sicher, dass:
+
+1. Der **`NetworkManager`** im Livesystem installiert und aktiviert ist
+2. Der Dienst in der Live-Session aktiv gestartet wird (`systemctl enable --now NetworkManager`)
+3. WLAN-Treiber (Firmware, z. B. `linux-firmware`, `iw`, `wpa_supplicant`) enthalten sind
+4. Ein einfacher Netzwerk-Indikator im Panel sichtbar ist (Plasma Network Widget)
+5. Optional ein CLI-Fallback via `nmtui` bereitgestellt wird
+
+Ziel: **Netzwerkverbindung soll nach dem ISO-Boot sofort möglich sein** – automatisch oder manuell. Notwendig für Calamares, Browsertests und zukünftige Online-Upgrades.
+🔧 Beispiel-Fix für dein build.sh (optional)
+In der Chroot-Install-Sektion:
+
+bash
+Kopieren
+Bearbeiten
+apt install -y network-manager linux-firmware wpasupplicant iw net-tools
+
+# Optional: systemd workaround für Live-Boot
+ln -sf /lib/systemd/system/NetworkManager.service "$CHROOT_DIR/etc/systemd/system/multi-user.target.wants/NetworkManager.service"
+🧪 Testmethode im Livesystem (nach dem Build)
+Booten der ISO
+
+Öffne ein Terminal (z. B. mit F12)
+
+Teste:
+
+bash
+Kopieren
+Bearbeiten
+nmcli device status
+ip a
+ping -c 2 1.1.1.1
+
+➕ **Erweiterung – Calamares wird nicht installiert:**  
+Die aktuelle ISO bootet korrekt, aber **Calamares ist im Livesystem nicht verfügbar**.  
+Das verhindert die grafische Installation von AILinux.
+
+Bitte stelle sicher, dass das `build.sh`-Skript folgende Punkte zuverlässig erfüllt:
+
+1. **Calamares-Paket** wird in der Chroot-Umgebung installiert:
+   - `calamares`, `qml-module-org-kde-kirigami2`, `qml-module-qtquick-controls2`, `qml-module-qtquick-layouts`, `libpwquality1` usw.
+2. Optional: eigenes Branding-Paket wie `calamares-settings-ailinux` wird installiert oder `/etc/calamares/` wird manuell befüllt
+3. Ein `.desktop`-Eintrag für den Autostart wird im Live-User-Profil eingebunden:
+   - entweder per `/etc/xdg/autostart/calamares.desktop` oder `/etc/skel/Desktop/Install AILinux.desktop`
+4. Das Livesystem soll Calamares automatisch beim Start anzeigen oder per Klick auf dem Desktop ermöglichen.
+
+💡 Wenn Calamares nicht startet, prüfe:
+- fehlende Qt-Abhängigkeiten
+- fehlendes Branding in `/etc/calamares/`
+- falsche Umgebungsvariable (z. B. `XDG_SESSION_TYPE`, `QT_QPA_PLATFORM`)
+- X-Session-Startverhalten (`startplasma-x11`, `startx`, `sddm`)
+
+Ziel: **Nach dem Booten der ISO soll Calamares zuverlässig als grafischer Installer verfügbar sein.** Die Installation von AILinux muss vollständig offline möglich sein, mit funktionierendem Bootloader, Mirror-Setup und Branding.
+
+---
+
+Wenn du möchtest, kann ich dir gleich auch eine Calamares-Branding-Struktur oder das passende `.desktop`-Autostartfile vorbereiten. Sag einfach Bescheid 💻✨
+
+
 🧠 Claude-Swarm Context (internal):
 
 This project is designed for multi-agent Claude Flow swarm execution.  

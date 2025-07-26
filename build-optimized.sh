@@ -19,13 +19,38 @@
 # Author: Claude Flow Swarm (Hierarchical Coordination)
 # License: MIT
 
-set -euo pipefail
+# Disabled aggressive error handling to prevent session logout
+# set -euo pipefail  # DANGEROUS: This causes session termination in SSH
+# Using modular error handling instead
 
 # ========================================
 # CONFIGURATION SECTION
 # ========================================
 
-readonly SCRIPT_VERSION="v26.01-OPTIMIZED"
+# Initialize session safety and error handling modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Basic logging functions (required by modules)
+log_info() { echo "[INFO] $*"; }
+log_success() { echo "[SUCCESS] $*"; }
+log_warn() { echo "[WARNING] $*"; }
+log_error() { echo "[ERROR] $*"; }
+
+# Export LOG_FILE for modules
+export LOG_FILE="${SCRIPT_DIR}/build.log"
+
+# Source safety modules first (with dependency order)
+if [[ -f "${SCRIPT_DIR}/modules/session_safety.sh" ]]; then
+    source "${SCRIPT_DIR}/modules/session_safety.sh"
+    init_session_safety
+fi
+
+if [[ -f "${SCRIPT_DIR}/modules/error_handler.sh" ]]; then
+    source "${SCRIPT_DIR}/modules/error_handler.sh"
+    init_error_handling "graceful"  # Use graceful mode to prevent session logout
+fi
+
+readonly SCRIPT_VERSION="v26.01-SESSION-SAFE"
 readonly DISTRO_NAME="AILinux"
 readonly DISTRO_VERSION="26.01"
 readonly DISTRO_EDITION="Premium"
