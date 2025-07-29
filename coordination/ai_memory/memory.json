@@ -1,0 +1,15 @@
+{
+  "initialized": "2025-07-29T07:23:55+02:00",
+  "session_id": "core_dev_session_326777",
+  "swarm_id": "ailinux-build-swarm-1753766623",
+  "conversations": {},
+  "context": {},
+  "decisions": [],
+  "learnings": [],
+  "api_usage": {
+    "c1_calls": 0,
+    "c2_calls": 0,
+    "c3_calls": 0,
+    "total_tokens": 0
+  }
+}

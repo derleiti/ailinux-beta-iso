@@ -1,0 +1,44 @@
+# AILinux Build Information
+# Generated: 2025-07-26 03:44:36 UTC
+
+[Distribution]
+Name=AILinux
+Version=26.01
+Edition=Premium
+Ubuntu_Base=24.04
+Codename=noble
+Architecture=amd64
+
+[Build Environment]
+Script_Version=v26.01-SESSION-SAFE
+Build_Date=2025-07-26
+Build_Time=03:44:36 UTC
+Build_Host=zombie
+Build_User=root
+Kernel_Version=6.15.5-061505-generic
+
+[Features]
+Desktop_Environment=KDE Plasma 6.x
+Installer=Calamares
+AI_Assistant=aihelp
+Secure_Boot=Enabled
+APT_Mirror=http://ailinux.me:8443/mirror/
+GPG_Key=A1945EE6DA93CB05
+
+[Files]
+ISO_Filename=ailinux-26.01-noble-amd64.iso
+SquashFS_Path=casper/filesystem.squashfs
+Kernel_Path=casper/vmlinuz
+InitRD_Path=casper/initrd
+
+[Quality Assurance]
+Build_Status=SUCCESS
+Error_Handling=Enhanced with AI debugging
+Mount_Safety=Implemented with tracking
+GPG_Verification=Framework ready
+Transaction_Rollback=Implemented
+
+[Contact]
+Support_URL=https://ailinux.me/support
+Documentation=https://ailinux.me/docs
+Issues=https://github.com/derleiti/ailinux-beta-iso/issues
